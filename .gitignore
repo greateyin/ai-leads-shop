@@ -1,0 +1,36 @@
+# OS
+.DS_Store
+
+# Local metadata
+.agent/
+.shared/
+
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Build output
+/dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env files
+.env
+.env.*
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+
+# Tooling caches
+.eslintcache
+*.tsbuildinfo
