@@ -1,0 +1,1051 @@
+// Prisma Schema for Manus AI Shop
+// 資料庫: PostgreSQL
+// 版本: Prisma 6.2+
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================
+// 租戶與使用者
+// ===========================================
+
+/// 租戶 - 對應一個商店群組或品牌
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  subdomain String   @unique
+  plan      Plan     @default(SEED)
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users             User[]
+  userTenants       UserTenant[]
+  shops             Shop[]
+  products          Product[]
+  orders            Order[]
+  payments          Payment[]
+  paymentProviders  PaymentProvider[]
+  shippingProviders ShippingProvider[]
+  blogPosts         BlogPost[]
+  aiInteractions    AiInteraction[]
+  aiAttributions    AiAttribution[]
+  analyticsEvents   AnalyticsEvent[]
+  billingAccount    TenantBillingAccount?
+  invoices          TenantInvoice[]
+  usageMetrics      TenantUsageMetric[]
+  apiLimits         TenantApiLimit[]
+  auditLogs         AuditLog[]
+  featureFlags      FeatureFlag[]
+  trackingSettings  TrackingSettings?
+
+  @@map("tenants")
+}
+
+/// 使用者
+model User {
+  id            String    @id @default(cuid())
+  tenantId      String?
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  provider      AuthProvider @default(CREDENTIALS)
+  role          UserRole  @default(CUSTOMER)
+  avatarUrl     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  tenant         Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userTenants    UserTenant[]
+  shops          Shop[]
+  orders         Order[]
+  carts          Cart[]
+  addresses      Address[]
+  blogPosts      BlogPost[]
+  aiInteractions AiInteraction[]
+  accounts       Account[]
+  sessions       Session[]
+  auditLogs      AuditLog[]
+  resetTokens    ResetToken[]
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+/// 使用者-租戶關聯 (支援一個用戶屬於多個租戶)
+model UserTenant {
+  id        String   @id @default(cuid())
+  userId    String
+  tenantId  String
+  role      UserRole @default(STAFF)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@map("user_tenants")
+}
+
+/// OAuth 帳號 (Auth.js)
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+/// Session (Auth.js)
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+/// 驗證 Token (Auth.js)
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+/// 密碼重設 Token
+model ResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reset_tokens")
+}
+
+// ===========================================
+// 商店
+// ===========================================
+
+/// 商店
+model Shop {
+  id          String   @id @default(cuid())
+  tenantId    String
+  ownerId     String
+  name        String
+  slug        String   @unique
+  domain      String?
+  description String?
+  logoUrl     String?
+  currency    String   @default("TWD")
+  timezone    String   @default("Asia/Taipei")
+  locale      String   @default("zh-TW")
+  config      Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner    User      @relation(fields: [ownerId], references: [id])
+  products Product[]
+  orders   Order[]
+
+  @@index([tenantId])
+  @@map("shops")
+}
+
+// ===========================================
+// 商品
+// ===========================================
+
+/// 商品分類
+model ProductCategory {
+  id          String   @id @default(cuid())
+  tenantId    String
+  parentId    String?
+  name        String
+  slug        String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  parent   ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children ProductCategory[] @relation("CategoryHierarchy")
+  products ProductCategoryAssignment[]
+
+  @@unique([tenantId, slug])
+  @@map("product_categories")
+}
+
+/// 商品
+model Product {
+  id              String        @id @default(cuid())
+  tenantId        String
+  shopId          String
+  name            String
+  slug            String
+  summary         String?
+  descriptionMd   String?       @db.Text
+  descriptionHtml String?       @db.Text
+  price           Decimal       @db.Decimal(12, 2)
+  cost            Decimal?      @db.Decimal(12, 2)
+  stock           Int           @default(0)
+  sku             String?
+  status          ProductStatus @default(DRAFT)
+  coverImageUrl   String?
+  ogTitle         String?       /// OpenGraph 標題
+  ogDescription   String?       /// OpenGraph 描述
+  ogImageUrl      String?       /// OpenGraph 圖片
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?     /// 軟刪除時間戳
+
+  // Relations
+  tenant     Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shop       Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  categories ProductCategoryAssignment[]
+  variants   ProductVariant[]
+  assets     ProductAsset[]
+  orderItems OrderItem[]
+  cartItems  CartItem[]
+
+  @@unique([shopId, slug])
+  @@unique([shopId, sku])
+  @@index([tenantId])
+  @@index([deletedAt])
+  @@map("products")
+}
+
+/// 商品分類關聯
+model ProductCategoryAssignment {
+  id         String @id @default(cuid())
+  productId  String
+  categoryId String
+
+  product  Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, categoryId])
+  @@map("product_category_assignments")
+}
+
+/// 商品變體 (規格)
+model ProductVariant {
+  id         String   @id @default(cuid())
+  productId  String
+  sku        String
+  name       String?
+  attributes Json?
+  price      Decimal  @db.Decimal(12, 2)
+  stock      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+  cartItems  CartItem[]
+
+  @@map("product_variants")
+}
+
+/// 商品媒體資源
+model ProductAsset {
+  id        String    @id @default(cuid())
+  productId String
+  type      AssetType @default(IMAGE)
+  url       String
+  altText   String?
+  sortOrder Int       @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_assets")
+}
+
+// ===========================================
+// 購物車與訂單
+// ===========================================
+
+/// 購物車
+model Cart {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String?
+  sessionId String?
+  total     Decimal  @default(0) @db.Decimal(12, 2)
+  currency  String   @default("TWD")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user  User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  @@map("carts")
+}
+
+/// 購物車項目
+model CartItem {
+  id        String @id @default(cuid())
+  cartId    String
+  productId String
+  variantId String?
+  quantity  Int    @default(1)
+
+  // Relations
+  cart    Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@unique([cartId, productId, variantId])
+  @@map("cart_items")
+}
+
+/// 訂單
+model Order {
+  id             String        @id @default(cuid())
+  tenantId       String
+  shopId         String
+  userId         String?
+  orderNo        String        @unique
+  status         OrderStatus   @default(PENDING)
+  currency       String        @default("TWD")
+  totalAmount    Decimal       @db.Decimal(12, 2)
+  shippingFee    Decimal       @default(0) @db.Decimal(12, 2)
+  discountAmount Decimal       @default(0) @db.Decimal(12, 2)
+  taxAmount      Decimal       @default(0) @db.Decimal(12, 2)
+  paymentStatus  PaymentStatus @default(PENDING)
+  shippingStatus ShippingStatus @default(PENDING)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shop           Shop            @relation(fields: [shopId], references: [id])
+  user           User?           @relation(fields: [userId], references: [id])
+  items          OrderItem[]
+  addresses      Address[]
+  payments       Payment[]
+  shippingOrders ShippingOrder[]
+  aiAttributions AiAttribution[]
+
+  @@index([tenantId])
+  @@index([orderNo])
+  @@map("orders")
+}
+
+/// 訂單明細
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String
+  variantId String?
+  name      String
+  sku       String?
+  quantity  Int
+  unitPrice Decimal @db.Decimal(12, 2)
+  discount  Decimal @default(0) @db.Decimal(12, 2)
+  subtotal  Decimal @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+
+  // Relations
+  order   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@map("order_items")
+}
+
+/// 地址
+model Address {
+  id           String      @id @default(cuid())
+  tenantId     String
+  userId       String?
+  orderId      String?
+  type         AddressType @default(SHIPPING)
+  contactName  String
+  phone        String
+  country      String      @default("TW")
+  state        String?
+  city         String
+  postalCode   String
+  addressLine1 String
+  addressLine2 String?
+  notes        String?
+  createdAt    DateTime    @default(now())
+
+  // Relations
+  user  User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("addresses")
+}
+
+// ===========================================
+// 金流
+// ===========================================
+
+/// 金流供應商配置
+model PaymentProvider {
+  id        String  @id @default(cuid())
+  tenantId  String
+  type      PaymentProviderType
+  name      String
+  config    Json
+  isDefault Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@map("payment_providers")
+}
+
+/// 付款記錄
+model Payment {
+  id              String        @id @default(cuid())
+  tenantId        String
+  orderId         String
+  providerId      String?
+  provider        PaymentProviderType
+  method          PaymentMethod?
+  amount          Decimal       @db.Decimal(12, 2)
+  currency        String        @default("TWD")
+  status          PaymentRecordStatus @default(INITIATED)
+  transactionNo   String?
+  providerOrderNo String?
+  paidAt          DateTime?
+  failureReason   String?
+  rawResponse     Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order             Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentProvider   PaymentProvider? @relation(fields: [providerId], references: [id])
+  notifications     PaymentNotification[]
+  refunds           PaymentRefund[]
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@map("payments")
+}
+
+/// 金流通知記錄
+model PaymentNotification {
+  id         String   @id @default(cuid())
+  paymentId  String
+  provider   PaymentProviderType
+  payload    Json
+  verified   Boolean  @default(false)
+  receivedAt DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@map("payment_notifications")
+}
+
+/// 退款記錄
+model PaymentRefund {
+  id               String       @id @default(cuid())
+  paymentId        String
+  amount           Decimal      @db.Decimal(12, 2)
+  currency         String       @default("TWD")
+  providerRefundNo String?
+  status           RefundStatus @default(PENDING)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@map("payment_refunds")
+}
+
+// ===========================================
+// 物流
+// ===========================================
+
+/// 物流供應商
+model ShippingProvider {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  code      String
+  config    Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shippingMethods ShippingMethod[]
+  shippingOrders  ShippingOrder[]
+
+  @@map("shipping_providers")
+}
+
+/// 配送方式
+model ShippingMethod {
+  id            String       @id @default(cuid())
+  tenantId      String
+  providerId    String
+  name          String
+  type          ShippingType @default(HOME)
+  baseFee       Decimal      @db.Decimal(12, 2)
+  freeThreshold Decimal?     @db.Decimal(12, 2)
+  etaDays       Int?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relations
+  provider       ShippingProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  shippingOrders ShippingOrder[]
+
+  @@map("shipping_methods")
+}
+
+/// 物流訂單
+model ShippingOrder {
+  id             String              @id @default(cuid())
+  tenantId       String
+  orderId        String
+  providerId     String
+  methodId       String
+  status         ShippingOrderStatus @default(CREATED)
+  trackingNumber String?
+  labelUrl       String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  // Relations
+  order    Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider ShippingProvider @relation(fields: [providerId], references: [id])
+  method   ShippingMethod   @relation(fields: [methodId], references: [id])
+
+  @@map("shipping_orders")
+}
+
+// ===========================================
+// 部落格
+// ===========================================
+
+/// 部落格文章
+model BlogPost {
+  id             String         @id @default(cuid())
+  tenantId       String
+  authorId       String
+  title          String
+  slug           String
+  contentMdx     String         @db.Text
+  summary        String?
+  coverImageUrl  String?
+  seoTitle       String?
+  seoDescription String?
+  seoJson        Json?
+  ogTitle        String?        /// OpenGraph 標題
+  ogDescription  String?        /// OpenGraph 描述
+  ogImageUrl     String?        /// OpenGraph 圖片
+  status         BlogPostStatus @default(DRAFT)
+  publishedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relations
+  tenant     Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  author     User                   @relation(fields: [authorId], references: [id])
+  categories BlogCategoryAssignment[]
+  tags       BlogTagAssignment[]
+
+  @@unique([tenantId, slug])
+  @@map("blog_posts")
+}
+
+/// 部落格分類
+model BlogCategory {
+  id          String   @id @default(cuid())
+  tenantId    String
+  parentId    String?
+  name        String
+  slug        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  parent   BlogCategory?  @relation("BlogCategoryHierarchy", fields: [parentId], references: [id])
+  children BlogCategory[] @relation("BlogCategoryHierarchy")
+  posts    BlogCategoryAssignment[]
+
+  @@unique([tenantId, slug])
+  @@map("blog_categories")
+}
+
+/// 部落格標籤
+model BlogTag {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  slug      String
+  createdAt DateTime @default(now())
+
+  posts BlogTagAssignment[]
+
+  @@unique([tenantId, slug])
+  @@map("blog_tags")
+}
+
+/// 文章分類關聯
+model BlogCategoryAssignment {
+  id         String @id @default(cuid())
+  postId     String
+  categoryId String
+
+  post     BlogPost     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  category BlogCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, categoryId])
+  @@map("blog_category_assignments")
+}
+
+/// 文章標籤關聯
+model BlogTagAssignment {
+  id     String @id @default(cuid())
+  postId String
+  tagId  String
+
+  post BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  BlogTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, tagId])
+  @@map("blog_tag_assignments")
+}
+
+// ===========================================
+// AI 服務
+// ===========================================
+
+/// AI 互動記錄
+model AiInteraction {
+  id        String            @id @default(cuid())
+  tenantId  String
+  userId    String
+  type      AiInteractionType
+  prompt    String            @db.Text
+  response  String            @db.Text
+  model     String
+  createdAt DateTime          @default(now())
+
+  // Relations
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [userId], references: [id])
+  attributions AiAttribution[]
+
+  @@index([tenantId])
+  @@map("ai_interactions")
+}
+
+// ===========================================
+// 分析
+// ===========================================
+
+/// 分析事件
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String?
+  sessionId  String?
+  eventName  String
+  properties Json?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([eventName])
+  @@map("analytics_events")
+}
+
+// ===========================================
+// 多租戶計費與配額
+// ===========================================
+
+/// 租戶計費帳戶
+model TenantBillingAccount {
+  id              String        @id @default(cuid())
+  tenantId        String        @unique
+  plan            Plan          @default(SEED)
+  billingMethod   BillingMethod @default(CREDIT_CARD)
+  nextBillingDate DateTime?
+  status          BillingStatus @default(ACTIVE)
+  // 支付供應商資訊
+  stripeCustomerId String?      @unique
+  billingEmail    String?
+  billingAddress  Json?
+  taxId           String?
+  currency        String        @default("TWD")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_billing_accounts")
+}
+
+/// 租戶發票
+model TenantInvoice {
+  id            String        @id @default(cuid())
+  tenantId      String
+  invoiceNo     String        @unique
+  amount        Decimal       @db.Decimal(12, 2)
+  currency      String        @default("TWD")
+  status        InvoiceStatus @default(DRAFT)
+  periodStart   DateTime
+  periodEnd     DateTime
+  dueDate       DateTime?
+  issuedAt      DateTime?     /// 發票開立時間
+  paidAt        DateTime?
+  invoiceUrl    String?
+  stripeInvoiceId String?
+  items         Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("tenant_invoices")
+}
+
+/// 租戶用量指標
+model TenantUsageMetric {
+  id          String      @id @default(cuid())
+  tenantId    String
+  metricType  MetricType
+  value       Decimal     @default(0) @db.Decimal(20, 2)
+  periodStart DateTime
+  periodEnd   DateTime
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, metricType, periodStart])
+  @@index([tenantId])
+  @@map("tenant_usage_metrics")
+}
+
+/// 租戶 API/配額限制
+model TenantApiLimit {
+  id         String     @id @default(cuid())
+  tenantId   String
+  metric     QuotaMetric
+  limitValue Decimal    @db.Decimal(20, 2)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, metric])
+  @@map("tenant_api_limits")
+}
+
+// ===========================================
+// AI 歸因追蹤
+// ===========================================
+
+/// AI 功能貢獻追蹤
+model AiAttribution {
+  id              String   @id @default(cuid())
+  tenantId        String
+  aiInteractionId String
+  orderId         String?
+  revenue         Decimal? @db.Decimal(12, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  aiInteraction AiInteraction  @relation(fields: [aiInteractionId], references: [id], onDelete: Cascade)
+  order         Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([aiInteractionId])
+  @@index([orderId])
+  @@map("ai_attributions")
+}
+
+// ===========================================
+// 稽核日誌
+// ===========================================
+
+/// 稽核日誌
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+// ===========================================
+// 功能旗標
+// ===========================================
+
+/// 功能旗標
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  key         String
+  enabled     Boolean  @default(false)
+  value       Json?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([key])
+  @@map("feature_flags")
+}
+
+// ===========================================
+// 追蹤設定
+// ===========================================
+
+/// 追蹤設定 (GA4/Pixel/GTM)
+model TrackingSettings {
+  id               String   @id @default(cuid())
+  tenantId         String   @unique
+  ga4MeasurementId String?  /// Google Analytics 4 Measurement ID
+  metaPixelId      String?  /// Meta (Facebook) Pixel ID
+  gtmContainerId   String?  /// Google Tag Manager Container ID
+  tiktokPixelId    String?  /// TikTok Pixel ID
+  lineTagId        String?  /// LINE Tag ID
+  customScripts    Json?    /// 自訂追蹤腳本
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tracking_settings")
+}
+
+// ===========================================
+// Enums
+// ===========================================
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum MetricType {
+  API_CALLS
+  AI_TOKENS
+  STORAGE_MB
+  ORDERS_COUNT
+  PRODUCTS_COUNT
+  BANDWIDTH_MB
+}
+
+enum Plan {
+  SEED
+  GROWTH
+  PRO
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum AuthProvider {
+  CREDENTIALS
+  GOOGLE
+  FACEBOOK
+  LINE
+  APPLE
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  STAFF
+  CUSTOMER
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AssetType {
+  IMAGE
+  VIDEO
+  PDF
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  COMPLETED
+  CANCELLED
+  REFUNDING
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ShippingStatus {
+  PENDING
+  PREPARING
+  DELIVERING
+  DELIVERED
+  RETURNED
+}
+
+enum PaymentProviderType {
+  ECPAY
+  NEWEBPAY
+  STRIPE
+  CASH
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  ATM
+  CVS
+  LINE_PAY
+  APPLE_PAY
+  GOOGLE_PAY
+}
+
+enum PaymentRecordStatus {
+  INITIATED
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  REFUNDED
+  FAILED
+}
+
+enum ShippingType {
+  HOME
+  CVS
+  PICKUP
+}
+
+enum ShippingOrderStatus {
+  CREATED
+  AWAITING_PICKUP
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum AddressType {
+  BILLING
+  SHIPPING
+  PICKUP
+  STORE
+}
+
+enum BlogPostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum AiInteractionType {
+  PRODUCT_DESCRIPTION
+  FAQ
+  BLOG_SUMMARY
+  CHAT
+  SEO_CONTENT
+  SALES_FORECAST
+}
+
+enum BillingMethod {
+  CREDIT_CARD
+  BANK_TRANSFER
+  CRYPTO
+}
+
+enum BillingStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum QuotaMetric {
+  REQUESTS_PER_MINUTE
+  AI_TOKENS_PER_MONTH
+  STORAGE_MB
+}
