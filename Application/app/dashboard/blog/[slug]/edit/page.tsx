@@ -18,6 +18,9 @@ interface BlogPost {
   coverImageUrl?: string;
   seoTitle?: string;
   seoDescription?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImageUrl?: string;
   status: string;
 }
 
@@ -117,6 +120,9 @@ export default function BlogEditPage({
           coverImageUrl: post.coverImageUrl,
           seoTitle: post.seoTitle,
           seoDescription: post.seoDescription,
+          ogTitle: post.ogTitle,
+          ogDescription: post.ogDescription,
+          ogImageUrl: post.ogImageUrl,
           status: post.status,
         }),
       });
@@ -295,6 +301,50 @@ export default function BlogEditPage({
                 onChange={(e) =>
                   setPost((prev) =>
                     prev ? { ...prev, seoDescription: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4 border-t pt-4">
+            <h3 className="font-semibold">OpenGraph 設定 (社群分享)</h3>
+            <div className="space-y-2">
+              <Label htmlFor="ogTitle">OG 標題</Label>
+              <Input
+                id="ogTitle"
+                placeholder="留空則使用文章標題"
+                value={post.ogTitle || ""}
+                onChange={(e) =>
+                  setPost((prev) =>
+                    prev ? { ...prev, ogTitle: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ogDescription">OG 描述</Label>
+              <textarea
+                id="ogDescription"
+                className="w-full rounded-md border p-2 min-h-[60px]"
+                placeholder="留空則使用摘要"
+                value={post.ogDescription || ""}
+                onChange={(e) =>
+                  setPost((prev) =>
+                    prev ? { ...prev, ogDescription: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ogImageUrl">OG 圖片 URL</Label>
+              <Input
+                id="ogImageUrl"
+                placeholder="留空則使用封面圖片"
+                value={post.ogImageUrl || ""}
+                onChange={(e) =>
+                  setPost((prev) =>
+                    prev ? { ...prev, ogImageUrl: e.target.value } : null
                   )
                 }
               />

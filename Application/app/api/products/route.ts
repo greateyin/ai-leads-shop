@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "20");
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status");
+    const categoryId = searchParams.get("categoryId");
 
     const where = {
       tenantId: session.user.tenantId,
@@ -49,6 +50,9 @@ export async function GET(request: NextRequest) {
         ],
       }),
       ...(status && { status: status as "DRAFT" | "PUBLISHED" | "ARCHIVED" }),
+      ...(categoryId && {
+        categories: { some: { categoryId } },
+      }),
     };
 
     const [products, total] = await Promise.all([

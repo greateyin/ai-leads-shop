@@ -8,8 +8,11 @@ import { JWT, DefaultJWT } from "next-auth/jwt";
 declare module "next-auth" {
   interface Session {
     user: {
+      /** 用戶 ID */
       id: string;
+      /** 當前租戶角色（來自 activeTenantRole 或 role） */
       role: string;
+      /** 當前活動租戶 ID（來自 activeTenantId 或 tenantId） */
       tenantId: string;
     } & DefaultSession["user"];
   }
@@ -22,8 +25,15 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
+    /** 用戶 ID */
     id: string;
+    /** 用戶原始角色 */
     role: string;
+    /** 用戶原始租戶 ID */
     tenantId: string;
+    /** 當前活動租戶 ID（多租戶切換用） */
+    activeTenantId?: string;
+    /** 當前活動租戶角色（多租戶切換用） */
+    activeTenantRole?: string;
   }
 }

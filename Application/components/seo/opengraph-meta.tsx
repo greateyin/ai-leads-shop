@@ -152,7 +152,7 @@ export function generateProductOpenGraph(product: {
     title: product.ogTitle || product.name,
     description: product.ogDescription || product.summary || undefined,
     imageUrl: product.ogImageUrl || product.coverImageUrl || undefined,
-    url: `${tenantUrl}/${shopSlug}/products/${product.slug}`,
+    url: `${tenantUrl}/products/${product.slug}`,
     type: "product",
     price: priceValue,
     currency: "TWD",

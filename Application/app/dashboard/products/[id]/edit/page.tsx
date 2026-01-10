@@ -21,6 +21,9 @@ interface Product {
   sku?: string;
   status: string;
   coverImageUrl?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImageUrl?: string;
 }
 
 /**
@@ -112,6 +115,9 @@ export default function ProductEditPage({
           sku: product.sku,
           status: product.status,
           coverImageUrl: product.coverImageUrl,
+          ogTitle: product.ogTitle,
+          ogDescription: product.ogDescription,
+          ogImageUrl: product.ogImageUrl,
         }),
       });
 
@@ -328,6 +334,50 @@ export default function ProductEditPage({
                 className="mt-2 w-full max-h-40 object-cover rounded-md"
               />
             )}
+          </div>
+
+          <div className="space-y-4 border-t pt-4">
+            <h3 className="font-semibold">OpenGraph 設定 (社群分享)</h3>
+            <div className="space-y-2">
+              <Label htmlFor="ogTitle">OG 標題</Label>
+              <Input
+                id="ogTitle"
+                placeholder="留空則使用商品名稱"
+                value={product.ogTitle || ""}
+                onChange={(e) =>
+                  setProduct((prev) =>
+                    prev ? { ...prev, ogTitle: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ogDescription">OG 描述</Label>
+              <textarea
+                id="ogDescription"
+                className="w-full rounded-md border p-2 min-h-[60px]"
+                placeholder="留空則使用簡介"
+                value={product.ogDescription || ""}
+                onChange={(e) =>
+                  setProduct((prev) =>
+                    prev ? { ...prev, ogDescription: e.target.value } : null
+                  )
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ogImageUrl">OG 圖片 URL</Label>
+              <Input
+                id="ogImageUrl"
+                placeholder="留空則使用封面圖片"
+                value={product.ogImageUrl || ""}
+                onChange={(e) =>
+                  setProduct((prev) =>
+                    prev ? { ...prev, ogImageUrl: e.target.value } : null
+                  )
+                }
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 import "@fontsource/outfit/400.css";
 import "@fontsource/outfit/700.css";
@@ -16,8 +15,7 @@ const ogImageUrl = ogImageEnv
     ? ogImageEnv
     : `${siteUrl}${ogImageEnv.startsWith("/") ? "" : "/"}${ogImageEnv}`
   : undefined;
-const ga4Id = process.env.NEXT_PUBLIC_GA4_ID;
-const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID;
+// 追蹤腳本已移至 (public)/layout.tsx，由租戶動態載入
 
 /**
  * 應用程式全域 Metadata
@@ -70,55 +68,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-TW" suppressHydrationWarning>
-      <head>
-        {ga4Id ? (
-          <>
-            <Script
-              src={`https://www.googletagmanager.com/gtag/js?id=${ga4Id}`}
-              strategy="afterInteractive"
-            />
-            <Script id="ga4-init" strategy="afterInteractive">
-              {`
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', '${ga4Id}');
-              `}
-            </Script>
-          </>
-        ) : null}
-        {pixelId ? (
-          <Script id="meta-pixel-init" strategy="afterInteractive">
-            {`
-              !function(f,b,e,v,n,t,s)
-              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-              n.queue=[];t=b.createElement(e);t.async=!0;
-              t.src=v;s=b.getElementsByTagName(e)[0];
-              s.parentNode.insertBefore(t,s)}(window, document,'script',
-              'https://connect.facebook.net/en_US/fbevents.js');
-              fbq('init', '${pixelId}');
-              fbq('track', 'PageView');
-            `}
-          </Script>
-        ) : null}
-      </head>
-      <body
-        className={`${inter.className} antialiased font-sans`}
-      >
+      <body className={`${inter.className} antialiased font-sans`}>
         <Providers>{children}</Providers>
-        {pixelId ? (
-          <noscript>
-            <img
-              height="1"
-              width="1"
-              style={{ display: "none" }}
-              src={`https://www.facebook.com/tr?id=${pixelId}&ev=PageView&noscript=1`}
-              alt=""
-            />
-          </noscript>
-        ) : null}
       </body>
     </html>
   );

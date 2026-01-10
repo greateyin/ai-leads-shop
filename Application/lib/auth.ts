@@ -74,13 +74,40 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     /**
      * JWT Callback - 將用戶資訊寫入 token
+     * 每次請求都會執行，從 DB 取得最新的 activeTenantId
      */
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
+      // 初次登入時設定基本資訊
       if (user) {
         token.id = user.id as string;
-        token.role = (user as { role?: string }).role || "";
+        token.role = (user as { role?: string }).role || "CUSTOMER";
         token.tenantId = (user as { tenantId?: string }).tenantId || "";
       }
+
+      // 每次請求都從 DB 讀取最新的 activeTenantId
+      // 這確保租戶切換後立即生效，不需前端呼叫 update()
+      if (token.id) {
+        try {
+          const userTenant = await db.userTenant.findFirst({
+            where: { userId: token.id as string, isDefault: true },
+          });
+          if (userTenant) {
+            token.activeTenantId = userTenant.tenantId;
+            token.activeTenantRole = userTenant.role;
+          } else {
+            // 沒有 userTenant 時，使用 user.tenantId
+            token.activeTenantId = token.tenantId as string;
+            token.activeTenantRole = token.role as string;
+          }
+        } catch {
+          // DB 錯誤時保持原值或使用預設值
+          if (!token.activeTenantId) {
+            token.activeTenantId = token.tenantId as string;
+            token.activeTenantRole = token.role as string;
+          }
+        }
+      }
+
       return token;
     },
     /**
@@ -89,10 +116,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.role = token.role as string;
-        session.user.tenantId = token.tenantId as string;
+        session.user.role = (token.activeTenantRole as string) || (token.role as string);
+        session.user.tenantId = (token.activeTenantId as string) || (token.tenantId as string);
       }
       return session;
+    },
+    /**
+     * SignIn Callback - OAuth 新用戶處理
+     */
+    async signIn({ user, account }) {
+      // OAuth 登入時，確保用戶有預設角色
+      if (account?.provider !== "credentials" && user.id) {
+        const dbUser = await db.user.findUnique({
+          where: { id: user.id },
+          select: { role: true, tenantId: true },
+        });
+        if (dbUser) {
+          (user as { role?: string }).role = dbUser.role;
+          (user as { tenantId?: string }).tenantId = dbUser.tenantId || "";
+        }
+      }
+      return true;
     },
   },
 });

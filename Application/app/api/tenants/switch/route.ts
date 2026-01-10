@@ -84,6 +84,8 @@ export async function POST(request: NextRequest) {
       }),
     ]);
 
+    // 回傳切換結果
+    // JWT callback 每次請求都會從 DB 讀取 isDefault，下次請求即生效
     return NextResponse.json({
       success: true,
       data: {

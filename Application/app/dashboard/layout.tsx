@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { auth, signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -66,7 +66,12 @@ export default async function DashboardLayout({
             <span className="text-sm text-muted-foreground">
               {session.user?.email}
             </span>
-            <form action="/api/auth/signout" method="POST">
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/login" });
+              }}
+            >
               <Button variant="ghost" size="sm" type="submit">
                 登出
               </Button>

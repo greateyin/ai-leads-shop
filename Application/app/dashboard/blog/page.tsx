@@ -14,7 +14,7 @@ export default function BlogPage() {
   useEffect(() => {
     async function fetchPosts() {
       try {
-        const response = await fetch("/api/blog");
+        const response = await fetch("/api/blog/posts");
         const data = await response.json();
         if (data.success) {
           setPosts(data.data.items);
@@ -54,6 +54,7 @@ export default function BlogPage() {
             {posts.map((post) => {
               const p = post as {
                 id: string;
+                slug: string;
                 title: string;
                 summary: string;
                 status: string;
@@ -64,7 +65,7 @@ export default function BlogPage() {
               return (
                 <Link
                   key={p.id}
-                  href={`/dashboard/blog/${p.id}`}
+                  href={`/dashboard/blog/${p.slug}/edit`}
                   className="block p-4 hover:bg-muted/50"
                 >
                   <div className="flex items-start justify-between">

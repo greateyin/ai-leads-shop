@@ -254,10 +254,13 @@ export async function DELETE(
       );
     }
 
-    // 軟刪除商品
+    // 軟刪除商品 (status=ARCHIVED + deletedAt)
     await db.product.update({
       where: { id },
-      data: { deletedAt: new Date() },
+      data: { 
+        status: "ARCHIVED",
+        deletedAt: new Date(),
+      },
     });
 
     // 記錄稽核日誌
