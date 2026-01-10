@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { generateId } from "@/lib/id";
 
 /**
  * 訂單更新 Schema
@@ -127,6 +128,7 @@ export async function PATCH(
     // 記錄稽核日誌
     await db.auditLog.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         userId: session.user.id,
         action: "UPDATE_ORDER",

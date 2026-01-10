@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { generateId } from "@/lib/id";
 
 /**
  * 文章更新 Schema
@@ -146,6 +147,8 @@ export async function PUT(
         if (categoryIds.length > 0) {
           await tx.blogCategoryAssignment.createMany({
             data: categoryIds.map((categoryId) => ({
+              id: generateId(),
+              tenantId: session.user.tenantId,
               postId: id,
               categoryId,
             })),
@@ -161,6 +164,8 @@ export async function PUT(
         if (tagIds.length > 0) {
           await tx.blogTagAssignment.createMany({
             data: tagIds.map((tagId) => ({
+              id: generateId(),
+              tenantId: session.user.tenantId,
               postId: id,
               tagId,
             })),
@@ -174,6 +179,7 @@ export async function PUT(
     // 記錄稽核日誌
     await db.auditLog.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         userId: session.user.id,
         action: "UPDATE",
@@ -239,6 +245,7 @@ export async function DELETE(
     // 記錄稽核日誌
     await db.auditLog.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         userId: session.user.id,
         action: "DELETE",

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyNotification } from "@/lib/payment/newebpay";
+import { generateId } from "@/lib/id";
 
 /**
  * POST /api/payments/newebpay/notify
@@ -29,9 +30,23 @@ export async function POST(request: NextRequest) {
 
     const paymentId = result.data.orderId.split("_")[0] || "";
 
+    // 取得 payment 的 tenantId
+    const payment = await db.payment.findUnique({
+      where: { id: paymentId },
+      select: { tenantId: true, orderId: true },
+    });
+
+    // 如果找不到 payment，記錄錯誤並跳過通知
+    if (!payment) {
+      console.error(`NewebPay 通知：找不到對應的付款記錄 (paymentId: ${paymentId})`);
+      return NextResponse.json({ success: false }, { status: 400 });
+    }
+
     // 記錄通知
     await db.paymentNotification.create({
       data: {
+        id: generateId(),
+        tenantId: payment.tenantId,
         paymentId,
         provider: "NEWEBPAY",
         payload: { TradeInfo, TradeSha, ...result.data },

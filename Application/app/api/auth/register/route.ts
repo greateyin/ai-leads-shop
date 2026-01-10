@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { slugify } from "@/lib/utils";
+import { generateId } from "@/lib/id";
 
 /**
  * 註冊請求 Schema
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
       // 建立租戶
       const tenant = await tx.tenant.create({
         data: {
+          id: generateId(),
           name: shopName,
           subdomain: shopSlug + "-" + Date.now().toString(36),
           plan: "SEED",
@@ -73,6 +75,7 @@ export async function POST(request: NextRequest) {
       // 建立用戶
       const user = await tx.user.create({
         data: {
+          id: generateId(),
           email,
           passwordHash,
           name: shopName,
@@ -84,6 +87,7 @@ export async function POST(request: NextRequest) {
       // 建立商店
       const shop = await tx.shop.create({
         data: {
+          id: generateId(),
           tenantId: tenant.id,
           ownerId: user.id,
           name: shopName,

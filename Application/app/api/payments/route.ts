@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { generateId } from "@/lib/id";
 
 /**
  * 建立付款 Schema
@@ -115,6 +116,7 @@ export async function POST(request: NextRequest) {
     // 建立付款記錄
     const payment = await db.payment.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         orderId,
         provider,

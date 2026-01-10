@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/utils";
+import { generateId } from "@/lib/id";
 
 /**
  * 分類建立 Schema
@@ -103,6 +104,7 @@ export async function POST(request: NextRequest) {
 
     const category = await db.blogCategory.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         name,
         slug: finalSlug,

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/utils";
+import { generateId } from "@/lib/id";
 
 /**
  * 文章建立 Schema
@@ -119,6 +120,7 @@ export async function POST(request: NextRequest) {
 
     const post = await db.blogPost.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         authorId: session.user.id,
         title,
@@ -132,12 +134,20 @@ export async function POST(request: NextRequest) {
         publishedAt: status === "PUBLISHED" ? new Date() : null,
         ...(categoryIds?.length && {
           categories: {
-            create: categoryIds.map((categoryId) => ({ categoryId })),
+            create: categoryIds.map((categoryId) => ({
+              id: generateId(),
+              tenantId: session.user.tenantId,
+              categoryId,
+            })),
           },
         }),
         ...(tagIds?.length && {
           tags: {
-            create: tagIds.map((tagId) => ({ tagId })),
+            create: tagIds.map((tagId) => ({
+              id: generateId(),
+              tenantId: session.user.tenantId,
+              tagId,
+            })),
           },
         }),
       },

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createAIService } from "@/lib/ai";
+import { generateId } from "@/lib/id";
 
 /**
  * AI 請求驗證 Schema
@@ -115,6 +116,7 @@ export async function POST(request: NextRequest) {
     // 記錄 AI 互動
     await db.aiInteraction.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         userId: session.user.id,
         type: aiInteractionType,
@@ -144,6 +146,7 @@ export async function POST(request: NextRequest) {
         value: { increment: 1 }, // 簡化計算，實際應計算 token 數
       },
       create: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         metricType: "AI_TOKENS",
         value: 1,

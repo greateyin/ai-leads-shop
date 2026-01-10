@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { generateId } from "@/lib/id";
 
 /**
  * 商品更新驗證 Schema
@@ -162,6 +163,8 @@ export async function PUT(
         if (categoryIds.length > 0) {
           await tx.productCategoryAssignment.createMany({
             data: categoryIds.map((categoryId: string) => ({
+              id: generateId(),
+              tenantId: session.user.tenantId,
               productId: id,
               categoryId,
             })),
@@ -175,6 +178,7 @@ export async function PUT(
     // 記錄稽核日誌
     await db.auditLog.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         userId: session.user.id,
         action: "UPDATE",
@@ -257,7 +261,7 @@ export async function DELETE(
     // 軟刪除商品 (status=ARCHIVED + deletedAt)
     await db.product.update({
       where: { id },
-      data: { 
+      data: {
         status: "ARCHIVED",
         deletedAt: new Date(),
       },
@@ -266,6 +270,7 @@ export async function DELETE(
     // 記錄稽核日誌
     await db.auditLog.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         userId: session.user.id,
         action: "DELETE",

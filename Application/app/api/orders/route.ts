@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { generateOrderNo } from "@/lib/utils";
+import { generateId } from "@/lib/id";
 
 /**
  * 訂單建立 Schema
@@ -152,6 +153,8 @@ export async function POST(request: NextRequest) {
       totalAmount += subtotal;
 
       return {
+        id: generateId(),
+        tenantId: session.user.tenantId,
         productId: product.id,
         variantId: item.variantId,
         name: product.name,
@@ -165,6 +168,7 @@ export async function POST(request: NextRequest) {
     // 建立訂單
     const order = await db.order.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         shopId: shop.id,
         userId: session.user.id,
@@ -175,7 +179,9 @@ export async function POST(request: NextRequest) {
         ...(shippingAddress && {
           addresses: {
             create: {
+              id: generateId(),
               tenantId: session.user.tenantId,
+              userId: session.user.id,
               type: "SHIPPING",
               ...shippingAddress,
               country: "TW",

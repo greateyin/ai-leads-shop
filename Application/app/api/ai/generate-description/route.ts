@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { generateId } from "@/lib/id";
 
 /**
  * AI 描述生成請求 Schema
@@ -86,6 +87,7 @@ A: 請參考產品說明書中的保養指南。`;
     // 記錄 AI 互動
     await db.aiInteraction.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         userId: session.user.id,
         type: "PRODUCT_DESCRIPTION",

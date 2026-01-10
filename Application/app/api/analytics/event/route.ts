@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { generateId } from "@/lib/id";
 
 /**
  * 事件記錄 Schema
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
     // 記錄事件
     const event = await db.analyticsEvent.create({
       data: {
+        id: generateId(),
         tenantId,
         userId: session.user?.id,
         sessionId,

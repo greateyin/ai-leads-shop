@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { generateId } from "@/lib/id";
 
 /**
  * 退款請求驗證 Schema
@@ -101,6 +102,8 @@ export async function POST(
     // 建立退款記錄
     const refund = await db.paymentRefund.create({
       data: {
+        id: generateId(),
+        tenantId: session.user.tenantId,
         paymentId,
         amount: refundAmount,
         currency: payment.currency,
@@ -124,7 +127,7 @@ export async function POST(
 
     // 更新付款與訂單狀態
     const isFullRefund = refundAmount >= Number(payment.amount);
-    
+
     await db.$transaction([
       db.payment.update({
         where: { id: paymentId },
@@ -143,6 +146,7 @@ export async function POST(
     // 記錄稽核日誌
     await db.auditLog.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         userId: session.user.id,
         action: "REFUND",

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { generateId } from "@/lib/id";
 
 /**
  * 追蹤設定更新 Schema
@@ -159,6 +160,7 @@ export async function PUT(
         customScripts: data.customScripts,
       },
       create: {
+        id: generateId(),
         tenantId,
         ga4MeasurementId: data.ga4MeasurementId,
         metaPixelId: data.metaPixelId,
@@ -172,6 +174,7 @@ export async function PUT(
     // 記錄稽核日誌
     await db.auditLog.create({
       data: {
+        id: generateId(),
         tenantId,
         userId: session.user.id,
         action: "UPDATE_TRACKING_SETTINGS",

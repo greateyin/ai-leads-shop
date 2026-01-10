@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyNotification } from "@/lib/payment/ecpay";
+import { generateId } from "@/lib/id";
 
 /**
  * POST /api/payments/ecpay/notify
@@ -32,9 +33,23 @@ export async function POST(request: NextRequest) {
 
     // 記錄通知
     const paymentId = result.orderId?.split("_")[0] || "";
-    
+
+    // 取得 payment 的 tenantId
+    const payment = await db.payment.findUnique({
+      where: { id: paymentId },
+      select: { tenantId: true, orderId: true },
+    });
+
+    // 如果找不到 payment，記錄錯誤並跳過通知
+    if (!payment) {
+      console.error(`ECPay 通知：找不到對應的付款記錄 (paymentId: ${paymentId})`);
+      return new NextResponse("0|Error", { status: 400 });
+    }
+
     await db.paymentNotification.create({
       data: {
+        id: generateId(),
+        tenantId: payment.tenantId,
         paymentId,
         provider: "ECPAY",
         payload,

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/utils";
+import { generateId } from "@/lib/id";
 
 /**
  * 標籤建立 Schema
@@ -101,6 +102,7 @@ export async function POST(request: NextRequest) {
 
     const tag = await db.blogTag.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         name,
         slug: finalSlug,

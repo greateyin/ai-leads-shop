@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createLogisticsService } from "@/lib/logistics";
+import { generateId } from "@/lib/id";
 
 /**
  * 建立物流訂單 Schema
@@ -169,6 +170,7 @@ export async function POST(request: NextRequest) {
     // 建立物流訂單記錄
     const shippingOrder = await db.shippingOrder.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         orderId,
         providerId,

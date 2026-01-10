@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { generateId } from "@/lib/id";
 
 /**
  * 重設密碼請求驗證 Schema
@@ -100,6 +101,7 @@ export async function POST(request: NextRequest) {
     // 記錄稽核日誌
     await db.auditLog.create({
       data: {
+        id: generateId(),
         tenantId: resetToken.user.tenantId || "system",
         userId: resetToken.userId,
         action: "PASSWORD_RESET",

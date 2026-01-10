@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/utils";
+import { generateId } from "@/lib/id";
 
 /**
  * 商品建立 Schema
@@ -144,6 +145,7 @@ export async function POST(request: NextRequest) {
 
     const product = await db.product.create({
       data: {
+        id: generateId(),
         tenantId: session.user.tenantId,
         shopId: shop.id,
         name,

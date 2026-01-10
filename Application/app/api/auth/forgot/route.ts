@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import crypto from "crypto";
 import { db } from "@/lib/db";
+import { generateId } from "@/lib/id";
 
 /**
  * 忘記密碼請求驗證 Schema
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
 
     await db.resetToken.create({
       data: {
+        id: generateId(),
         userId: user.id,
         token,
         expiresAt,
