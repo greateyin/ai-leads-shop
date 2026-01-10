@@ -119,14 +119,15 @@ export async function POST(request: NextRequest) {
       activeTenantRole: defaultTenant?.role || user.role,
     };
 
-    // 編碼 JWT
-    const secret = process.env.AUTH_SECRET;
+    // 編碼 JWT - 支援 AUTH_SECRET 與 NEXTAUTH_SECRET
+    const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
     if (!secret) {
-      throw new Error("AUTH_SECRET is not configured");
+      throw new Error("AUTH_SECRET or NEXTAUTH_SECRET is not configured");
     }
 
-    // Auth.js v5 使用 salt 參數
-    const salt = process.env.NODE_ENV === "production" 
+    // Auth.js v5 使用 salt 參數（cookie 名稱）
+    const isProduction = process.env.NODE_ENV === "production";
+    const salt = isProduction 
       ? "__Secure-authjs.session-token" 
       : "authjs.session-token";
 
@@ -140,12 +141,17 @@ export async function POST(request: NextRequest) {
     // 設定 session cookie
     const cookieStore = await cookies();
     
+    // 跨子網域支援：若設定 COOKIE_DOMAIN 則使用
+    // 例如：COOKIE_DOMAIN=".aisell.tw" 可讓 *.aisell.tw 共用 session
+    const cookieDomain = process.env.COOKIE_DOMAIN;
+    
     cookieStore.set(salt, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isProduction,
       sameSite: "lax",
       path: "/",
       maxAge: 30 * 24 * 60 * 60, // 30 天
+      ...(cookieDomain && { domain: cookieDomain }),
     });
 
     // 返回用戶資料

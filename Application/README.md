@@ -1,4 +1,4 @@
-# Manus AI Shop
+# AIsell
 
 AI 驅動的輕量級電商 SaaS 平台，讓微型零售商與創作者能在幾分鐘內建立專業線上商店。
 
@@ -10,22 +10,25 @@ AI 驅動的輕量級電商 SaaS 平台，讓微型零售商與創作者能在�
 - 🚚 **物流串接** - 超商取件、宅配一鍵設定
 - 📊 **數據分析** - 即時儀表板與銷售預測
 - 📝 **內容行銷** - 支援 SEO/AEO 的部落格系統
+- 🏢 **多租戶架構** - 支援跨子網域登入與租戶切換
+- 🔐 **完整認證** - Email/密碼、Google、Facebook OAuth
 
 ## 技術棧
 
-- **框架**: Next.js 15+ (App Router)
+- **框架**: Next.js 16+ (App Router)
 - **UI**: shadcn/ui + Tailwind CSS
-- **認證**: Auth.js v5
+- **認證**: Auth.js v5 (JWT Session)
 - **資料庫**: PostgreSQL + Prisma ORM 6.2+
 - **語言**: TypeScript
+- **部署**: Vercel / Netlify
 
 ## 開始使用
 
 ### 環境需求
 
 - Node.js 18+
-- PostgreSQL 17+
-- Yarn
+- PostgreSQL 17+ (或 Neon)
+- pnpm / Yarn
 
 ### 安裝步驟
 
@@ -33,27 +36,27 @@ AI 驅動的輕量級電商 SaaS 平台，讓微型零售商與創作者能在�
 
 ```bash
 cd Application
-yarn install
+pnpm install
 ```
 
 2. **設定環境變數**
 
 ```bash
-cp .env.example .env
-# 編輯 .env 填入必要的設定
+cp .env.example .env.local
+# 編輯 .env.local 填入必要的設定
 ```
 
 3. **初始化資料庫**
 
 ```bash
-yarn db:generate
-yarn db:push
+pnpm db:generate
+pnpm db:push
 ```
 
 4. **啟動開發伺服器**
 
 ```bash
-yarn dev
+pnpm dev
 ```
 
 5. 開啟瀏覽器訪問 [http://localhost:3000](http://localhost:3000)
@@ -63,16 +66,23 @@ yarn dev
 ```
 Application/
 ├── app/                    # Next.js App Router
-│   ├── (auth)/            # 認證頁面 (登入、註冊)
+│   ├── (public)/          # 公開頁面 (商店前台)
 │   ├── dashboard/         # 後台管理頁面
 │   └── api/               # API Route Handlers
+│       ├── auth/          # 認證 API
+│       ├── products/      # 商品 API
+│       ├── orders/        # 訂單 API
+│       ├── blog/          # 部落格 API
+│       └── tenants/       # 租戶管理 API
 ├── components/            # React 元件
 │   ├── ui/               # shadcn/ui 基礎元件
+│   ├── seo/              # SEO/OpenGraph 元件
 │   └── ...               # 業務元件
 ├── lib/                   # 核心函式庫
 │   ├── auth.ts           # Auth.js 配置
 │   ├── db.ts             # Prisma Client
 │   ├── payment/          # 金流 SDK
+│   ├── logistics/        # 物流 SDK
 │   └── utils.ts          # 工具函式
 ├── prisma/               # Prisma Schema
 ├── types/                # TypeScript 型別定義
@@ -83,24 +93,52 @@ Application/
 
 | 指令 | 說明 |
 |------|------|
-| `yarn dev` | 啟動開發伺服器 |
-| `yarn build` | 建置生產版本 |
-| `yarn start` | 啟動生產伺服器 |
-| `yarn lint` | 執行 ESLint 檢查 |
-| `yarn db:generate` | 生成 Prisma Client |
-| `yarn db:push` | 同步資料庫 Schema |
-| `yarn db:migrate` | 執行資料庫遷移 |
-| `yarn db:studio` | 開啟 Prisma Studio |
+| `pnpm dev` | 啟動開發伺服器 |
+| `pnpm build` | 建置生產版本 |
+| `pnpm start` | 啟動生產伺服器 |
+| `pnpm lint` | 執行 ESLint 檢查 |
+| `pnpm db:generate` | 生成 Prisma Client |
+| `pnpm db:push` | 同步資料庫 Schema |
+| `pnpm db:migrate` | 執行資料庫遷移 |
+| `pnpm db:studio` | 開啟 Prisma Studio |
 
 ## 環境變數
 
 詳見 `.env.example` 檔案，主要配置包括：
 
-- `DATABASE_URL` - PostgreSQL 連線字串
-- `AUTH_SECRET` - Auth.js 加密金鑰
-- `AUTH_*` - OAuth 提供者設定
-- `ECPAY_*` / `NEWEBPAY_*` / `STRIPE_*` - 金流設定
-- `OPENAI_API_KEY` - AI 服務金鑰
+| 變數 | 說明 |
+|------|------|
+| `DATABASE_URL` | PostgreSQL / Neon 連線字串 |
+| `AUTH_SECRET` | Auth.js 加密金鑰 (至少 32 字元) |
+| `NEXTAUTH_URL` | 應用程式 URL |
+| `AUTH_GOOGLE_*` | Google OAuth 設定 |
+| `AUTH_FACEBOOK_*` | Facebook OAuth 設定 |
+| `ECPAY_*` | 綠界金流/物流設定 |
+| `NEWEBPAY_*` | 藍新金流/物流設定 |
+| `STRIPE_*` | Stripe 國際金流設定 |
+| `OPENAI_API_KEY` | OpenAI API 金鑰 |
+| `COOKIE_DOMAIN` | 跨子網域 Cookie 設定 |
+
+## API 端點
+
+### 認證
+- `POST /api/auth/login` - 登入並設定 session
+- `POST /api/auth/register` - 註冊新用戶
+- `GET /api/auth/[...nextauth]` - Auth.js 處理器
+
+### 商品
+- `GET /api/products` - 商品列表 (支援 categoryId 篩選)
+- `POST /api/products` - 建立商品
+- `PUT /api/products/[id]` - 更新商品
+- `DELETE /api/products/[id]` - 軟刪除商品
+
+### 部落格
+- `GET /api/blog/posts` - 文章列表
+- `GET /api/blog/categories` - 分類列表
+- `GET /api/blog/tags` - 標籤列表
+
+### 租戶
+- `POST /api/tenants/switch` - 切換活動租戶
 
 ## 授權
 
