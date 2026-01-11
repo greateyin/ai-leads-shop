@@ -34,3 +34,6 @@ test-results/
 # Tooling caches
 .eslintcache
 *.tsbuildinfo
+
+# Local env files
+single-class-0.8.0/
