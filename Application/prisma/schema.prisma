@@ -67,6 +67,7 @@ model Tenant {
   auditLogs                  AuditLog[]
   featureFlags               FeatureFlag[]
   trackingSettings           TrackingSettings?
+  tenantInvites              TenantInvite[]
 
   @@map("tenants")
 }
@@ -98,6 +99,7 @@ model User {
   sessions       Session[]
   auditLogs      AuditLog[]
   resetTokens    ResetToken[]
+  tenantInvites  TenantInvite[]  @relation("InvitedBy")
 
   @@index([tenantId])
   @@map("users")
@@ -105,13 +107,14 @@ model User {
 
 /// 使用者-租戶關聯 (支援一個用戶屬於多個租戶)
 model UserTenant {
-  id        String   @id @db.Uuid
-  userId    String   @db.Uuid
-  tenantId  String   @db.Uuid
-  role      UserRole @default(STAFF)
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String           @id @db.Uuid
+  userId    String           @db.Uuid
+  tenantId  String           @db.Uuid
+  role      UserRole         @default(STAFF)
+  status    UserTenantStatus @default(ACTIVE)
+  isDefault Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -119,6 +122,42 @@ model UserTenant {
   @@unique([userId, tenantId])
   @@index([tenantId])
   @@map("user_tenants")
+}
+
+/// 用戶租戶狀態
+enum UserTenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+/// 租戶邀請
+model TenantInvite {
+  id         String             @id @db.Uuid
+  tenantId   String             @db.Uuid
+  email      String
+  role       UserRole           @default(STAFF)
+  token      String             @unique
+  invitedBy  String             @db.Uuid
+  status     TenantInviteStatus @default(PENDING)
+  expiresAt  DateTime
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inviter User   @relation("InvitedBy", fields: [invitedBy], references: [id])
+
+  @@index([tenantId])
+  @@index([email])
+  @@index([token])
+  @@map("tenant_invites")
+}
+
+/// 邀請狀態
+enum TenantInviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
 }
 
 /// OAuth 帳號 (Auth.js)
@@ -337,7 +376,7 @@ model ProductAsset {
 model Cart {
   id        String   @id @db.Uuid
   tenantId  String   @db.Uuid
-  userId    String?
+  userId    String?  @db.Uuid
   sessionId String?  @db.Uuid
   total     Decimal  @default(0) @db.Decimal(12, 2)
   currency  String   @default("TWD")
@@ -377,7 +416,7 @@ model Order {
   id             String         @id @db.Uuid
   tenantId       String         @db.Uuid
   shopId         String         @db.Uuid
-  userId         String?
+  userId         String?        @db.Uuid
   orderNo        String         @unique
   status         OrderStatus    @default(PENDING)
   currency       String         @default("TWD")
@@ -750,7 +789,7 @@ model AiInteraction {
 model AnalyticsEvent {
   id         String   @id @db.Uuid
   tenantId   String   @db.Uuid
-  userId     String?
+  userId     String?  @db.Uuid
   sessionId  String?  @db.Uuid
   eventName  String
   properties Json?
@@ -880,7 +919,7 @@ model AiAttribution {
 model AuditLog {
   id         String   @id @db.Uuid
   tenantId   String   @db.Uuid
-  userId     String?
+  userId     String?  @db.Uuid
   action     String
   entityType String
   entityId   String?
@@ -907,7 +946,7 @@ model AuditLog {
 /// 功能旗標
 model FeatureFlag {
   id          String   @id @db.Uuid
-  tenantId    String?
+  tenantId    String?  @db.Uuid
   key         String
   enabled     Boolean  @default(false)
   value       Json?
@@ -942,6 +981,30 @@ model TrackingSettings {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("tracking_settings")
+}
+
+/// 向量嵌入 (用於 RAG)
+/// 注意：需要安裝 pgvector 擴展
+model Embedding {
+  id         String              @id @db.Uuid
+  tenantId   String              @db.Uuid
+  entityType EmbeddingEntityType
+  entityId   String
+  content    String
+  vector     Unsupported("vector(1536)")?
+  metadata   Json?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@unique([tenantId, entityType, entityId])
+  @@index([tenantId])
+  @@map("embeddings")
+}
+
+enum EmbeddingEntityType {
+  PRODUCT
+  BLOG_POST
+  FAQ
 }
 
 // ===========================================
@@ -988,6 +1051,7 @@ enum UserRole {
   OWNER
   ADMIN
   STAFF
+  VIEWER
   CUSTOMER
 }
 
@@ -1032,6 +1096,7 @@ enum PaymentProviderType {
   ECPAY
   NEWEBPAY
   STRIPE
+  PAYPAL
   CASH
 }
 
@@ -1109,4 +1174,6 @@ enum QuotaMetric {
   REQUESTS_PER_MINUTE
   AI_TOKENS_PER_MONTH
   STORAGE_MB
+  ORDERS_COUNT
+  PRODUCTS_COUNT
 }

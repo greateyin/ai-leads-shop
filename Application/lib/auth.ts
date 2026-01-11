@@ -2,14 +2,26 @@ import NextAuth from "next-auth";
 import type { Adapter } from "next-auth/adapters";
 import Google from "next-auth/providers/google";
 import Facebook from "next-auth/providers/facebook";
+import Line from "next-auth/providers/line";
+import Resend from "next-auth/providers/resend";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
+// 動態取得環境變數
+const googleClientId = process.env.AUTH_GOOGLE_ID;
+const googleClientSecret = process.env.AUTH_GOOGLE_SECRET;
+const facebookClientId = process.env.AUTH_FACEBOOK_ID;
+const facebookClientSecret = process.env.AUTH_FACEBOOK_SECRET;
+const lineClientId = process.env.AUTH_LINE_ID;
+const lineClientSecret = process.env.AUTH_LINE_SECRET;
+const resendApiKey = process.env.RESEND_API_KEY;
+const resendFromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+
 /**
  * Auth.js v5 配置
- * 支援 Google、Facebook OAuth 與 Email/Password 登入
+ * 支援 Google、Facebook、LINE OAuth、Resend Magic Link 與 Email/Password 登入
  */
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(db) as Adapter,
@@ -19,18 +31,47 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: "/login",
     error: "/login",
+    verifyRequest: "/auth/verify-request", // Magic link 驗證頁
   },
   providers: [
-    /** Google OAuth */
-    Google({
-      clientId: process.env.AUTH_GOOGLE_ID!,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET!,
-    }),
-    /** Facebook OAuth */
-    Facebook({
-      clientId: process.env.AUTH_FACEBOOK_ID!,
-      clientSecret: process.env.AUTH_FACEBOOK_SECRET!,
-    }),
+    // Google OAuth (僅當環境變數存在時啟用)
+    ...(googleClientId && googleClientSecret
+      ? [
+        Google({
+          clientId: googleClientId,
+          clientSecret: googleClientSecret,
+          allowDangerousEmailAccountLinking: true,
+        }),
+      ]
+      : []),
+    // Facebook OAuth
+    ...(facebookClientId && facebookClientSecret
+      ? [
+        Facebook({
+          clientId: facebookClientId,
+          clientSecret: facebookClientSecret,
+          allowDangerousEmailAccountLinking: true,
+        }),
+      ]
+      : []),
+    // LINE OAuth
+    ...(lineClientId && lineClientSecret
+      ? [
+        Line({
+          clientId: lineClientId,
+          clientSecret: lineClientSecret,
+        }),
+      ]
+      : []),
+    // Resend Magic Link
+    ...(resendApiKey
+      ? [
+        Resend({
+          apiKey: resendApiKey,
+          from: resendFromEmail,
+        }),
+      ]
+      : []),
     /** Email/Password 認證 */
     Credentials({
       name: "credentials",

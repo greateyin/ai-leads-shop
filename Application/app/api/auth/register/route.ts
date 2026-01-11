@@ -95,13 +95,35 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return { userId: user.id, tenantId: tenant.id, shopId: shop.id };
+      return { userId: user.id, tenantId: tenant.id, shopId: shop.id, userName: user.name, userEmail: email };
     });
+
+    // 發送驗證郵件
+    try {
+      const { sendVerificationEmail } = await import("@/lib/email");
+
+      // 產生驗證 token
+      const verificationToken = generateId();
+      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 小時
+
+      await db.verificationToken.create({
+        data: {
+          identifier: email,
+          token: verificationToken,
+          expires,
+        },
+      });
+
+      await sendVerificationEmail(email, verificationToken, result.userName || undefined);
+    } catch (emailError) {
+      // 郵件發送失敗不影響註冊流程
+      console.error("[Register] 發送驗證郵件失敗:", emailError);
+    }
 
     return NextResponse.json({
       success: true,
-      data: result,
-      message: "註冊成功",
+      data: { userId: result.userId, tenantId: result.tenantId, shopId: result.shopId },
+      message: "註冊成功，請檢查您的信箱進行驗證",
     });
   } catch (error) {
     console.error("註冊錯誤:", error);

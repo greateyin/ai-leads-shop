@@ -150,14 +150,14 @@ export async function PUT(
     const product = await db.$transaction(async (tx) => {
       // 更新商品基本資料
       const updated = await tx.product.update({
-        where: { id },
+        where: { id, tenantId: session.user.tenantId },
         data: updateData,
       });
 
       // 更新分類關聯
       if (categoryIds !== undefined) {
         await tx.productCategoryAssignment.deleteMany({
-          where: { productId: id },
+          where: { productId: id, tenantId: session.user.tenantId },
         });
 
         if (categoryIds.length > 0) {
@@ -260,7 +260,7 @@ export async function DELETE(
 
     // 軟刪除商品 (status=ARCHIVED + deletedAt)
     await db.product.update({
-      where: { id },
+      where: { id, tenantId: session.user.tenantId },
       data: {
         status: "ARCHIVED",
         deletedAt: new Date(),

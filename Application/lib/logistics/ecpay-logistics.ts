@@ -178,6 +178,20 @@ export class ECPayLogisticsService implements LogisticsService {
   }
 
   /**
+   * 驗證 Webhook 簽章 (CheckMacValue)
+   * 用於驗證 ECPay 回調的來源真實性
+   */
+  verifyCheckMacValue(params: Record<string, string | number>): boolean {
+    const receivedCheckMac = params.CheckMacValue;
+    if (!receivedCheckMac) {
+      return false;
+    }
+
+    const expectedCheckMac = this.generateCheckMacValue(params);
+    return receivedCheckMac === expectedCheckMac;
+  }
+
+  /**
    * 對應配送類型到綠界物流類型
    */
   private mapShippingType(shippingType: string): string {

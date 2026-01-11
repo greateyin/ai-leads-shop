@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { db } from "@/lib/db";
 import { generateId } from "@/lib/id";
 
@@ -46,9 +47,12 @@ export async function POST(request: NextRequest) {
 
     const { token, password } = validation.data;
 
+    // 對傳入的 token 進行雜湊後比對（DB 存的是雜湊值）
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
     // 查詢重設 token
     const resetToken = await db.resetToken.findUnique({
-      where: { token },
+      where: { token: tokenHash },
       include: { user: true },
     });
 

@@ -135,14 +135,14 @@ export async function PUT(
     const post = await db.$transaction(async (tx) => {
       // 更新文章基本資料
       const updated = await tx.blogPost.update({
-        where: { id },
+        where: { id, tenantId: session.user.tenantId },
         data: updateData,
       });
 
       // 更新分類關聯
       if (categoryIds !== undefined) {
         await tx.blogCategoryAssignment.deleteMany({
-          where: { postId: id },
+          where: { postId: id, tenantId: session.user.tenantId },
         });
         if (categoryIds.length > 0) {
           await tx.blogCategoryAssignment.createMany({
@@ -159,7 +159,7 @@ export async function PUT(
       // 更新標籤關聯
       if (tagIds !== undefined) {
         await tx.blogTagAssignment.deleteMany({
-          where: { postId: id },
+          where: { postId: id, tenantId: session.user.tenantId },
         });
         if (tagIds.length > 0) {
           await tx.blogTagAssignment.createMany({
@@ -185,14 +185,55 @@ export async function PUT(
         action: "UPDATE",
         entityType: "BlogPost",
         entityId: id,
-        oldValue: existingPost,
-        newValue: post,
+        oldValue: existingPost as object,
+        newValue: post as object,
       },
     });
 
+    // 重新取得完整文章資料用於生成 SEO JSON
+    const fullPost = await db.blogPost.findFirst({
+      where: { id, tenantId: session.user.tenantId },
+      include: {
+        author: { select: { id: true, name: true } },
+        categories: { include: { category: true } },
+        tags: { include: { tag: true } },
+      },
+    });
+
+    // 生成 SEO JSON-LD
+    if (fullPost) {
+      try {
+        const { generateBlogPostSeoJson } = await import("@/lib/seo/json-ld");
+        const seoJson = generateBlogPostSeoJson({
+          title: fullPost.title,
+          slug: fullPost.slug,
+          summary: fullPost.summary,
+          contentMdx: fullPost.contentMdx,
+          author: { name: fullPost.author.name },
+          publishedAt: fullPost.publishedAt,
+          updatedAt: fullPost.updatedAt,
+          coverImageUrl: fullPost.coverImageUrl,
+          seoTitle: fullPost.seoTitle,
+          seoDescription: fullPost.seoDescription,
+        });
+
+        await db.blogPost.update({
+          where: { id, tenantId: session.user.tenantId },
+          data: { seoJson: seoJson as object },
+        });
+
+        return NextResponse.json({
+          success: true,
+          data: { ...fullPost, seoJson },
+        });
+      } catch (seoError) {
+        console.warn("[Blog] SEO JSON-LD 生成失敗:", seoError);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      data: post,
+      data: fullPost || post,
     });
   } catch (error) {
     console.error("Update post error:", error);
@@ -239,7 +280,7 @@ export async function DELETE(
 
     // 刪除文章
     await db.blogPost.delete({
-      where: { id },
+      where: { id, tenantId: session.user.tenantId },
     });
 
     // 記錄稽核日誌

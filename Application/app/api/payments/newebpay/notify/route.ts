@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     // 更新付款狀態
     if (result.data.status === "paid") {
       await db.payment.update({
-        where: { id: paymentId },
+        where: { id: paymentId, tenantId: payment.tenantId },
         data: {
           status: "PAID",
           paidAt: new Date(),
@@ -65,21 +65,42 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 更新訂單狀態
-      const payment = await db.payment.findUnique({
-        where: { id: paymentId },
-        select: { orderId: true },
+      // 更新訂單狀態 (使用已取得的 payment.orderId 和 tenantId)
+      await db.order.update({
+        where: { id: payment.orderId, tenantId: payment.tenantId },
+        data: {
+          paymentStatus: "PAID",
+          status: "PAID",
+        },
       });
 
-      if (payment) {
-        await db.order.update({
-          where: { id: payment.orderId },
-          data: {
-            paymentStatus: "PAID",
-            status: "PAID",
-          },
+      // 扣減庫存
+      const { deductStock } = await import("@/lib/stock");
+      const orderItems = await db.orderItem.findMany({
+        where: { orderId: payment.orderId, tenantId: payment.tenantId },
+        select: { productId: true, variantId: true, quantity: true },
+      });
+      await deductStock(orderItems);
+
+      // 發送付款成功通知給顧客
+      try {
+        const order = await db.order.findFirst({
+          where: { id: payment.orderId, tenantId: payment.tenantId },
+          select: { orderNo: true, totalAmount: true, user: { select: { email: true } } },
         });
+        if (order?.user?.email) {
+          const { sendPaymentSuccessEmail } = await import("@/lib/email");
+          await sendPaymentSuccessEmail(
+            order.user.email,
+            order.orderNo,
+            Number(order.totalAmount)
+          );
+        }
+      } catch (emailError) {
+        console.error("[NewebPay] 發送付款成功通知失敗:", emailError);
       }
+
+      console.log(`[NewebPay] 訂單 ${payment.orderId} 付款成功，已扣減庫存並發送通知`);
     }
 
     return NextResponse.json({ success: true });

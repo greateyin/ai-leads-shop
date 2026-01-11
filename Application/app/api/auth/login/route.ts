@@ -32,6 +32,18 @@ const loginSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    // IP-based 速率限制
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      || request.headers.get("x-real-ip")
+      || "unknown";
+
+    const { checkRateLimit, AUTH_RATE_LIMITS, createRateLimitResponse } = await import("@/lib/auth-rate-limit");
+    const rateLimitResult = checkRateLimit(`login:${ip}`, AUTH_RATE_LIMITS.LOGIN);
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(createRateLimitResponse(rateLimitResult), { status: 429 });
+    }
+
     const body = await request.json();
     const validation = loginSchema.safeParse(body);
 
@@ -99,6 +111,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 驗證 email 是否已確認（ENFORCE_EMAIL_VERIFICATION=true 時強制）
+    const enforceEmailVerification = process.env.ENFORCE_EMAIL_VERIFICATION === "true";
+    if (enforceEmailVerification && !user.emailVerified) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "EMAIL_NOT_VERIFIED",
+            message: "請先驗證您的電子郵件後再登入",
+          },
+        },
+        { status: 403 }
+      );
+    }
+
     // 查詢用戶的租戶列表
     const userTenants = await db.userTenant.findMany({
       where: { userId: user.id },
@@ -127,8 +154,8 @@ export async function POST(request: NextRequest) {
 
     // Auth.js v5 使用 salt 參數（cookie 名稱）
     const isProduction = process.env.NODE_ENV === "production";
-    const salt = isProduction 
-      ? "__Secure-authjs.session-token" 
+    const salt = isProduction
+      ? "__Secure-authjs.session-token"
       : "authjs.session-token";
 
     const token = await encode({
@@ -140,11 +167,11 @@ export async function POST(request: NextRequest) {
 
     // 設定 session cookie
     const cookieStore = await cookies();
-    
+
     // 跨子網域支援：若設定 COOKIE_DOMAIN 則使用
     // 例如：COOKIE_DOMAIN=".aisell.tw" 可讓 *.aisell.tw 共用 session
     const cookieDomain = process.env.COOKIE_DOMAIN;
-    
+
     cookieStore.set(salt, token, {
       httpOnly: true,
       secure: isProduction,

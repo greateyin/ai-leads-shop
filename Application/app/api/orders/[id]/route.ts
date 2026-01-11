@@ -116,7 +116,7 @@ export async function PATCH(
     }
 
     const updatedOrder = await db.order.update({
-      where: { id },
+      where: { id, tenantId: session.user.tenantId },
       data: validation.data,
       include: {
         items: true,

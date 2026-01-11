@@ -168,6 +168,36 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // 生成 SEO JSON-LD
+    try {
+      const { generateBlogPostSeoJson } = await import("@/lib/seo/json-ld");
+      const seoJson = generateBlogPostSeoJson({
+        title: post.title,
+        slug: post.slug,
+        summary: post.summary,
+        contentMdx: post.contentMdx,
+        author: { name: post.author.name },
+        publishedAt: post.publishedAt,
+        updatedAt: post.updatedAt,
+        coverImageUrl: post.coverImageUrl,
+        seoTitle: post.seoTitle,
+        seoDescription: post.seoDescription,
+      });
+
+      await db.blogPost.update({
+        where: { id: post.id },
+        data: { seoJson: seoJson as object },
+      });
+
+      // 返回包含 seoJson 的 post
+      return NextResponse.json({
+        success: true,
+        data: { ...post, seoJson },
+      });
+    } catch (seoError) {
+      console.warn("[Blog] SEO JSON-LD 生成失敗:", seoError);
+    }
+
     return NextResponse.json({
       success: true,
       data: post,

@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-01-11
+
+### Added
+
+- **資安強化**
+  - ECPay 物流 Webhook 簽章驗證 (CheckMacValue)
+  - 重設密碼 Token 改用 SHA-256 雜湊儲存
+  - Stripe payment_intent.payment_failed 加入 tenantId 限制
+  - 登入 API 支援強制 Email 驗證 (`ENFORCE_EMAIL_VERIFICATION`)
+  - 新增 `lib/auth-rate-limit.ts` IP-based 速率限制
+
+- **API 功能**
+  - `POST /api/products/[id]/adjust-stock` 庫存調整 API
+  - `PATCH /api/tenants/[id]/billing` 方案與付款方式更新
+  - `POST/GET /api/users/invite` 團隊成員邀請
+  - `POST /api/users/invite/accept` 接受邀請
+  - `GET/PATCH/DELETE /api/users/[id]` 成員管理
+
+- **AI 與向量搜尋**
+  - `lib/vector.ts` 向量搜尋服務 (pgvector + OpenAI Embeddings)
+  - `POST /api/ai/chat` RAG 導購聊天 API
+  - `Embedding` 資料表支援商品/文章向量索引
+
+- **背景任務**
+  - `lib/jobs/invoice-reconciliation.ts` 發票對帳
+  - `lib/jobs/usage-calculation.ts` 用量計算
+  - `/api/cron/daily` 與 `/api/cron/hourly` Vercel Cron 端點
+
+- **Schema 更新**
+  - `TenantInvite` 模型 (邀請機制)
+  - `Embedding` 模型 (向量儲存)
+  - 修正多個 `@db.Uuid` 型別註解
+
+### Changed
+
+- `lib/email.ts` 新增通用 `sendEmail()` 函數
+- `lib/rate-limit.ts` 使用 Prisma `QuotaMetric` 列舉
+
+### Fixed
+
+- `Cart.userId` / `Order.userId` / `AnalyticsEvent.userId` / `AuditLog.userId` 型別修正
+- `FeatureFlag.tenantId` 型別修正
+- AI chat route `description` → `descriptionMd`
+- 移除 `UserTenant.status` 不存在欄位參考
+
 ## [0.2.0] - 2026-01-10
 
 ### Added
@@ -71,5 +116,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.3.0]: https://github.com/user/light-weight-shop/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/user/light-weight-shop/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/user/light-weight-shop/releases/tag/v0.1.0

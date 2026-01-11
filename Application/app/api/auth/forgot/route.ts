@@ -17,6 +17,18 @@ const forgotPasswordSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    // IP-based 速率限制
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      || request.headers.get("x-real-ip")
+      || "unknown";
+
+    const { checkRateLimit, AUTH_RATE_LIMITS, createRateLimitResponse } = await import("@/lib/auth-rate-limit");
+    const rateLimitResult = checkRateLimit(`forgot:${ip}`, AUTH_RATE_LIMITS.FORGOT_PASSWORD);
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(createRateLimitResponse(rateLimitResult), { status: 429 });
+    }
+
     const body = await request.json();
     const validation = forgotPasswordSchema.safeParse(body);
 
@@ -58,21 +70,30 @@ export async function POST(request: NextRequest) {
 
     // 產生新的重設 token
     const token = crypto.randomBytes(32).toString("hex");
+    // 對 token 進行 SHA-256 雜湊後儲存，原始 token 發送給使用者
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 小時後過期
 
     await db.resetToken.create({
       data: {
         id: generateId(),
         userId: user.id,
-        token,
+        token: tokenHash, // 儲存雜湊後的 token
         expiresAt,
       },
     });
 
-    // TODO: 發送重設密碼郵件
-    // 在實際環境中，這裡應該呼叫郵件服務發送包含 token 的重設連結
-    // 例如: await sendResetPasswordEmail(email, token);
-    console.log(`[DEV] Reset token for ${email}: ${token}`);
+    // 發送重設密碼郵件
+    try {
+      const { sendPasswordResetEmail } = await import("@/lib/email");
+      const result = await sendPasswordResetEmail(email, token);
+      if (!result.success) {
+        console.error("[Auth] 發送重設密碼郵件失敗:", result.error);
+      }
+    } catch (emailError) {
+      console.error("[Auth] 發送重設密碼郵件錯誤:", emailError);
+      // 不影響主流程，繼續回傳成功訊息
+    }
 
     return NextResponse.json({
       success: true,

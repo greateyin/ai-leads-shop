@@ -128,8 +128,8 @@ export async function GET() {
     const revenueGrowth =
       lastMonthRevenue._sum.totalAmount && Number(lastMonthRevenue._sum.totalAmount) > 0
         ? (((Number(monthRevenue._sum.totalAmount) || 0) - Number(lastMonthRevenue._sum.totalAmount)) /
-            Number(lastMonthRevenue._sum.totalAmount)) *
-          100
+          Number(lastMonthRevenue._sum.totalAmount)) *
+        100
         : 0;
 
     const orderGrowth =
@@ -137,7 +137,7 @@ export async function GET() {
 
     // 取得熱門商品詳細資訊
     const topProductDetails = await db.product.findMany({
-      where: { id: { in: topProducts.map((p) => p.productId) } },
+      where: { id: { in: topProducts.map((p) => p.productId) }, tenantId },
       select: { id: true, name: true, coverImageUrl: true },
     });
 
