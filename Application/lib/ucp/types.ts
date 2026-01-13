@@ -1,0 +1,228 @@
+/**
+ * UCP (Universal Commerce Protocol) 類型定義
+ * @see https://ucp.dev/specification/overview/
+ */
+
+// ===========================================
+// 基礎類型
+// ===========================================
+
+/** 金額格式（UCP 使用 minor units，如分） */
+export interface UcpMoney {
+    value: number; // Minor units (cents)
+    currency: string; // ISO 4217
+}
+
+/** UCP 地址格式 */
+export interface UcpAddress {
+    name?: string;
+    addressLines: string[];
+    locality: string; // City
+    administrativeArea?: string; // State/Province
+    postalCode: string;
+    regionCode: string; // ISO 3166-1 alpha-2 (e.g., "TW")
+    phoneNumber?: string;
+}
+
+// ===========================================
+// 商品/Offer 相關
+// ===========================================
+
+/** UCP Offer（商品報價） */
+export interface UcpOffer {
+    id: string;
+    merchantId: string;
+    name: string;
+    description?: string;
+    price: UcpMoney;
+    availability: "IN_STOCK" | "OUT_OF_STOCK" | "PREORDER" | "BACKORDER";
+    imageUrl?: string;
+    productUrl?: string;
+    gtin?: string; // Global Trade Item Number
+    sku?: string;
+    brand?: string;
+    condition?: "NEW" | "REFURBISHED" | "USED";
+    attributes?: Record<string, string>;
+}
+
+/** UCP 庫存查詢請求 */
+export interface UcpAvailabilityRequest {
+    offers: Array<{
+        id: string;
+        quantity?: number;
+    }>;
+    shippingAddress?: UcpAddress;
+}
+
+/** UCP 庫存查詢回應 */
+export interface UcpAvailabilityResponse {
+    offers: Array<{
+        id: string;
+        availability: "IN_STOCK" | "OUT_OF_STOCK" | "PREORDER" | "BACKORDER";
+        price: UcpMoney;
+        quantity?: number;
+        maxQuantity?: number;
+    }>;
+}
+
+// ===========================================
+// 結帳 Session 相關
+// ===========================================
+
+/** UCP 購物車項目 */
+export interface UcpCartItem {
+    offerId: string;
+    quantity: number;
+    price?: UcpMoney;
+}
+
+/** UCP 付款處理器 */
+export interface UcpPaymentHandler {
+    id: string;
+    type: "CARD" | "WALLET" | "BANK_TRANSFER" | "OTHER";
+    name: string;
+    supportedNetworks?: string[];
+    processorEndpoint?: string;
+    processorPublicKey?: string;
+}
+
+/** UCP 建立結帳 Session 請求 */
+export interface UcpCreateCheckoutRequest {
+    merchantId: string;
+    cart: {
+        items: UcpCartItem[];
+        currency: string;
+    };
+    shippingAddress?: UcpAddress;
+    billingAddress?: UcpAddress;
+    buyerEmail?: string;
+    buyerPhone?: string;
+    metadata?: Record<string, string>;
+}
+
+/** UCP 結帳 Session 狀態 */
+export type UcpCheckoutStatus =
+    | "PENDING"
+    | "AWAITING_PAYMENT"
+    | "PROCESSING"
+    | "COMPLETED"
+    | "EXPIRED"
+    | "CANCELLED";
+
+/** UCP 結帳 Session 回應 */
+export interface UcpCheckoutSession {
+    id: string;
+    merchantId: string;
+    status: UcpCheckoutStatus;
+    cart: {
+        items: UcpCartItem[];
+        subtotal: UcpMoney;
+        shippingFee?: UcpMoney;
+        tax?: UcpMoney;
+        total: UcpMoney;
+    };
+    shippingAddress?: UcpAddress;
+    billingAddress?: UcpAddress;
+    paymentHandlers: UcpPaymentHandler[];
+    expiresAt: string; // RFC 3339
+    createdAt: string; // RFC 3339
+    updatedAt: string; // RFC 3339
+    continueUrl?: string; // For embedded checkout
+    orderId?: string;
+}
+
+// ===========================================
+// 訂單相關
+// ===========================================
+
+/** UCP 建立訂單請求 */
+export interface UcpCreateOrderRequest {
+    checkoutSessionId: string;
+    paymentToken: string;
+    paymentHandlerId: string;
+}
+
+/** UCP 訂單狀態 */
+export type UcpOrderStatus =
+    | "PENDING"
+    | "CONFIRMED"
+    | "PROCESSING"
+    | "SHIPPED"
+    | "DELIVERED"
+    | "CANCELLED"
+    | "REFUNDED";
+
+/** UCP 訂單回應 */
+export interface UcpOrder {
+    id: string;
+    merchantId: string;
+    merchantOrderId: string; // 商家端訂單編號
+    status: UcpOrderStatus;
+    cart: {
+        items: UcpCartItem[];
+        subtotal: UcpMoney;
+        shippingFee?: UcpMoney;
+        tax?: UcpMoney;
+        total: UcpMoney;
+    };
+    shippingAddress?: UcpAddress;
+    billingAddress?: UcpAddress;
+    payment: {
+        status: "PENDING" | "AUTHORIZED" | "CAPTURED" | "FAILED" | "REFUNDED";
+        transactionId?: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+}
+
+// ===========================================
+// 錯誤處理
+// ===========================================
+
+/** UCP 標準錯誤碼 */
+export type UcpErrorCode =
+    | "INVALID_REQUEST"
+    | "UNAUTHORIZED"
+    | "FORBIDDEN"
+    | "NOT_FOUND"
+    | "CONFLICT"
+    | "INSUFFICIENT_STOCK"
+    | "PAYMENT_FAILED"
+    | "SESSION_EXPIRED"
+    | "INTERNAL_ERROR";
+
+/** UCP 錯誤回應 */
+export interface UcpError {
+    code: UcpErrorCode;
+    message: string;
+    details?: Record<string, unknown>;
+}
+
+// ===========================================
+// Profile / Discovery
+// ===========================================
+
+/** UCP Profile */
+export interface UcpProfile {
+    version: string;
+    profile: {
+        id: string;
+        name: string;
+        description?: string;
+        homepage?: string;
+        services: {
+            shopping?: {
+                version: string;
+                rest?: {
+                    schema: string;
+                    endpoint: string;
+                };
+                mcp?: {
+                    schema: string;
+                    endpoint: string;
+                };
+            };
+        };
+        capabilities: string[];
+    };
+}

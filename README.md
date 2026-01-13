@@ -62,6 +62,54 @@ Application/
 - [系統規格書](specs/system_spec_detailed.md)
 - [更新日誌](Application/CHANGELOG.md)
 
+## 🤖 UCP 整合 (Universal Commerce Protocol)
+
+AIsell 支援 Google UCP，讓 AI 代理（如 Google Gemini、Search AI Mode）能夠發現商品並完成結帳。
+
+### 註冊 Google Merchant Center
+
+1. 前往 [Google Merchant Center](https://merchants.google.com/) 註冊帳號
+2. 完成商家驗證（驗證網站所有權）
+3. 上傳商品動態饋給（Product Feed）或使用 Content API
+4. 在「成長」>「管理平台整合」中啟用 UCP
+5. 取得 Merchant ID 並記錄下來
+
+### 啟用 Shop 的 UCP
+
+在資料庫中更新 Shop 的 `config` 欄位：
+
+```json
+{
+  "ucp": {
+    "enabled": true,
+    "allowedPlatforms": ["google"],
+    "paymentHandlers": ["stripe"]
+  }
+}
+```
+
+### 在 UCP Playground 測試
+
+1. 前往 [ucp.dev/playground](https://ucp.dev/playground/)
+2. 輸入你的 API 端點：
+   - Profile: `https://your-domain.com/api/ucp/profile?merchantId=<shop-id>`
+   - Products: `https://your-domain.com/api/ucp/products?merchantId=<shop-id>`
+3. 測試以下流程：
+   - **商品發現**：驗證商品資料格式符合 UCP 規範
+   - **庫存查詢**：確認即時庫存回應正確
+   - **結帳建立**：測試 Checkout Session 建立
+   - **訂單確認**：驗證訂單建立與付款流程
+
+### UCP API 端點一覽
+
+| 端點 | 方法 | 說明 |
+|------|------|------|
+| `/api/ucp/profile` | GET | UCP 功能發現與協商 |
+| `/api/ucp/products` | GET | 商品列表與搜尋 |
+| `/api/ucp/availability` | POST | 即時庫存與價格查詢 |
+| `/api/ucp/checkout-sessions` | POST/GET | 建立/查詢結帳 Session |
+| `/api/ucp/orders` | POST/GET | 建立/查詢訂單 |
+
 ## 📄 License
 
 MIT

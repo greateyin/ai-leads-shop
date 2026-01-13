@@ -1,0 +1,22 @@
+{
+  "version": "2026-01-11",
+  "profile": {
+    "id": "aisell-commerce",
+    "name": "AIsell Commerce",
+    "description": "AIsell 電商平台 - 支援 UCP 原生結帳",
+    "homepage": "https://aisell.io",
+    "services": {
+      "shopping": {
+        "version": "1.0",
+        "rest": {
+          "schema": "https://ucp.dev/services/shopping/rest.openapi.json",
+          "endpoint": "/api/ucp"
+        }
+      }
+    },
+    "capabilities": [
+      "dev.ucp.shopping.checkout",
+      "dev.ucp.shopping.orders"
+    ]
+  }
+}

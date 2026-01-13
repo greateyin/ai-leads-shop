@@ -68,6 +68,7 @@ model Tenant {
   featureFlags               FeatureFlag[]
   trackingSettings           TrackingSettings?
   tenantInvites              TenantInvite[]
+  ucpCheckoutSessions        UcpCheckoutSession[]
 
   @@map("tenants")
 }
@@ -496,6 +497,47 @@ model Address {
   @@index([tenantId])
   @@index([userId])
   @@map("addresses")
+}
+
+// ===========================================
+// UCP (Universal Commerce Protocol)
+// ===========================================
+
+/// UCP 結帳 Session
+model UcpCheckoutSession {
+  id              String              @id @db.Uuid
+  tenantId        String              @db.Uuid
+  shopId          String              @db.Uuid
+  platformId      String              @default("google") // UCP Platform 識別碼
+  status          UcpSessionStatus    @default(PENDING)
+  cartData        Json                // UCP 購物車資料 (items, subtotal, total)
+  shippingAddress Json?               // UCP 格式的寄送地址
+  billingAddress  Json?               // UCP 格式的帳單地址
+  paymentHandlers Json                // 回傳給平台的付款處理器
+  buyerEmail      String?
+  metadata        Json?               // 額外的元資料
+  orderId         String?             @db.Uuid
+  expiresAt       DateTime
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([shopId])
+  @@index([expiresAt])
+  @@map("ucp_checkout_sessions")
+}
+
+/// UCP Session 狀態
+enum UcpSessionStatus {
+  PENDING
+  AWAITING_PAYMENT
+  PROCESSING
+  COMPLETED
+  EXPIRED
+  CANCELLED
 }
 
 // ===========================================
