@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { generateProductOpenGraph } from "@/components/seo/opengraph-meta";
+import { renderMdx, isHtmlContent } from "@/lib/mdx";
 
 /**
  * 取得商品資料
@@ -70,8 +71,8 @@ export default async function ProductPage({
     notFound();
   }
 
-  const price = typeof product.price === "object" 
-    ? Number(product.price) 
+  const price = typeof product.price === "object"
+    ? Number(product.price)
     : product.price;
 
   return (
@@ -235,10 +236,33 @@ export default async function ProductPage({
         <div className="mt-12 pt-8 border-t">
           <h2 className="text-2xl font-bold mb-4">商品說明</h2>
           <div className="prose max-w-none">
-            <div dangerouslySetInnerHTML={{ __html: product.descriptionHtml || product.descriptionMd }} />
+            <ProductDescription
+              content={product.descriptionMd}
+              htmlContent={product.descriptionHtml}
+            />
           </div>
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * 商品描述元件
+ * 優先使用 MDX 渲染，若內容為 HTML 則使用 dangerouslySetInnerHTML
+ */
+async function ProductDescription({
+  content,
+  htmlContent
+}: {
+  content: string;
+  htmlContent?: string | null;
+}) {
+  // 如果有預渲染的 HTML 且它是真正的 HTML 內容，使用它
+  if (htmlContent && isHtmlContent(htmlContent)) {
+    return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+  }
+
+  // 否則使用 MDX 渲染
+  return <>{await renderMdx(content)}</>;
 }

@@ -4,65 +4,87 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222.2 84% 4.9%;
+    /* Visme-inspired Light Theme
+       Background: Clean White
+       Foreground: Deep Navy (almost black) for text
+       Primary: Vibrant Blue (Brand color)
+       Secondary: Light Grayish Blue (Backgrounds/Borders)
+       Accent: Vibrant Purple/Pink for gradients/highlights
+    */
+    --background: 0 0% 100%;
+    /* #ffffff */
+    --foreground: 222 47% 11%;
+    /* #0f172a - Deep Navy */
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
- 
+    --card-foreground: 222 47% 11%;
+
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
- 
-    --primary: 255 85% 60%;
-    --primary-foreground: 0 0% 100%;
- 
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
- 
-    --muted: 220 14% 96%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 221 83% 53%;
+    /* #2563EB - Vibrant Blue */
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    /* #f1f5f9 */
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
- 
-    --accent: 320 80% 60%;
-    --accent-foreground: 0 0% 100%;
- 
-    --destructive: 0 84% 60%;
+    /* #64748b */
+
+    --accent: 262 83% 58%;
+    /* #8b5cf6 - Vibrant Purple */
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 255 85% 60%;
- 
+    --ring: 221 83% 53%;
+
     --radius: 0.75rem;
+    /* More rounded, friendly look (12px) */
   }
- 
+
   .dark {
+    /* Visme-inspired Dark Theme
+       Background: Rich Dark Navy
+       Foreground: Off-white
+       Primary: Lighter vibrant blue
+    */
     --background: 222 47% 11%;
+    /* #0f172a */
     --foreground: 210 40% 98%;
- 
+    /* #f8fafc */
+
     --card: 222 47% 11%;
     --card-foreground: 210 40% 98%;
- 
+
     --popover: 222 47% 11%;
     --popover-foreground: 210 40% 98%;
- 
-    --primary: 255 90% 65%;
-    --primary-foreground: 0 0% 100%;
- 
-    --secondary: 217 32% 17%;
+
+    --primary: 217 91% 60%;
+    /* #3b82f6 */
+    --primary-foreground: 222 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
- 
-    --muted: 217 32% 17%;
+
+    --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
- 
-    --accent: 320 90% 65%;
-    --accent-foreground: 0 0% 100%;
- 
+
+    --accent: 262 83% 58%;
+    --accent-foreground: 210 40% 98%;
+
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
- 
-    --border: 217 32% 17%;
-    --input: 217 32% 17%;
-    --ring: 255 90% 65%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
   }
 }
 
@@ -70,7 +92,17 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-heading tracking-tight;
   }
 }

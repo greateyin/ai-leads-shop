@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { generateOrderNo } from "@/lib/utils";
 import { generateId } from "@/lib/id";
+import { sendGuestOrderConfirmationEmail } from "@/lib/email";
 
 /**
  * 訂單建立 Schema
@@ -287,6 +288,32 @@ export async function POST(request: NextRequest) {
         addresses: true,
       },
     });
+
+    // 發送訪客訂單確認郵件 (非阻塞)
+    if (isGuestCheckout && guestEmail) {
+      sendGuestOrderConfirmationEmail({
+        email: guestEmail,
+        orderNo: order.orderNo,
+        guestName: guestName || shippingAddress?.contactName,
+        totalAmount,
+        currency: shop.currency,
+        items: orderItems.map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.subtotal,
+        })),
+        shippingAddress: shippingAddress
+          ? {
+            contactName: shippingAddress.contactName,
+            phone: shippingAddress.phone,
+            city: shippingAddress.city,
+            addressLine1: shippingAddress.addressLine1,
+          }
+          : undefined,
+      }).catch((err) => {
+        console.error("[Orders] 發送訂單確認郵件失敗:", err);
+      });
+    }
 
     return NextResponse.json({
       success: true,

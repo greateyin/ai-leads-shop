@@ -212,3 +212,159 @@ export async function sendEmail(options: {
     }
 }
 
+/**
+ * 發送訪客訂單確認郵件
+ * 用於訪客結帳後發送確認信
+ */
+export async function sendGuestOrderConfirmationEmail(options: {
+    email: string;
+    orderNo: string;
+    guestName?: string;
+    totalAmount: number;
+    currency?: string;
+    items: Array<{
+        name: string;
+        quantity: number;
+        price: number;
+    }>;
+    shippingAddress?: {
+        contactName: string;
+        phone?: string;
+        city: string;
+        addressLine1: string;
+    };
+}): Promise<{ success: boolean; error?: string }> {
+    try {
+        const resend = await getResendClient();
+        const appName = getAppName();
+        const fromEmail = getFromEmail();
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+        const currency = options.currency || "TWD";
+        const displayName = options.guestName || "貴賓";
+
+        // 建立訂單項目 HTML
+        const itemsHtml = options.items
+            .map(
+                (item) => `
+          <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${item.name}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">${item.quantity}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${currency} ${item.price.toLocaleString()}</td>
+          </tr>
+        `
+            )
+            .join("");
+
+        // 建立收件地址 HTML
+        const addressHtml = options.shippingAddress
+            ? `
+          <div style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-top: 16px;">
+            <h3 style="margin: 0 0 12px 0; color: #374151; font-size: 14px;">📦 收件資訊</h3>
+            <p style="margin: 4px 0; color: #4b5563; font-size: 14px;">
+              <strong>收件人：</strong>${options.shippingAddress.contactName}
+            </p>
+            ${options.shippingAddress.phone ? `<p style="margin: 4px 0; color: #4b5563; font-size: 14px;"><strong>電話：</strong>${options.shippingAddress.phone}</p>` : ""}
+            <p style="margin: 4px 0; color: #4b5563; font-size: 14px;">
+              <strong>地址：</strong>${options.shippingAddress.city} ${options.shippingAddress.addressLine1}
+            </p>
+          </div>
+        `
+            : "";
+
+        const { error } = await resend.emails.send({
+            from: `${appName} <${fromEmail}>`,
+            to: options.email,
+            subject: `[${appName}] 訂單確認 ${options.orderNo}`,
+            html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>訂單確認</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+          <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+              <div style="font-size: 48px; margin-bottom: 16px;">🎉</div>
+              <h1 style="color: #111827; font-size: 24px; font-weight: 700; margin: 0;">${appName}</h1>
+            </div>
+
+            <div style="background-color: #ffffff; border-radius: 16px; padding: 40px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+              <div style="text-align: center; margin-bottom: 24px;">
+                <span style="background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600;">訂單已確認</span>
+              </div>
+
+              <h2 style="color: #111827; font-size: 22px; font-weight: 600; margin: 0 0 16px 0; text-align: center;">
+                感謝您的訂購，${displayName}！
+              </h2>
+
+              <p style="color: #4b5563; font-size: 16px; line-height: 26px; margin-bottom: 24px; text-align: center;">
+                您的訂單已成功建立，我們將盡快處理。
+              </p>
+
+              <div style="background: linear-gradient(135deg, #f0f9ff, #e0f2fe); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                <p style="margin: 0 0 8px 0; color: #0369a1; font-size: 14px;">
+                  <strong>訂單編號：</strong> ${options.orderNo}
+                </p>
+                <p style="margin: 0; color: #0369a1; font-size: 18px; font-weight: 700;">
+                  <strong>總金額：</strong> ${currency} ${options.totalAmount.toLocaleString()}
+                </p>
+              </div>
+
+              <h3 style="color: #374151; font-size: 14px; margin: 24px 0 12px 0;">📋 訂單明細</h3>
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <thead>
+                  <tr style="background: #f9fafb;">
+                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">商品</th>
+                    <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">數量</th>
+                    <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e5e7eb;">小計</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsHtml}
+                </tbody>
+              </table>
+
+              ${addressHtml}
+
+              <div style="text-align: center; margin-top: 32px;">
+                <a href="${baseUrl}" style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #ffffff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">
+                  繼續購物
+                </a>
+              </div>
+
+              <div style="background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 16px; margin-top: 24px;">
+                <p style="color: #92400e; font-size: 14px; margin: 0;">
+                  💡 <strong>提示：</strong>註冊帳號可以追蹤訂單狀態並享有會員優惠！
+                </p>
+              </div>
+
+              <p style="color: #9ca3af; font-size: 12px; text-align: center; margin-top: 24px;">
+                如有任何問題，請回覆此郵件與我們聯繫。
+              </p>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+              <p style="color: #9ca3af; font-size: 14px; margin: 0;">
+                &copy; ${new Date().getFullYear()} ${appName}. All rights reserved.
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+        });
+
+        if (error) {
+            console.error("[Email] 發送訪客訂單確認郵件失敗:", error);
+            return { success: false, error: error.message };
+        }
+
+        console.log(`[Email] 已發送訂單確認郵件至 ${options.email}`);
+        return { success: true };
+    } catch (error) {
+        console.error("[Email] 發送訪客訂單確認郵件錯誤:", error);
+        return { success: false, error: String(error) };
+    }
+}

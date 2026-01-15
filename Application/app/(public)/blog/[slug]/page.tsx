@@ -2,24 +2,13 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { generateBlogOpenGraph } from "@/components/seo/opengraph-meta";
-import { renderMdx, isHtmlContent } from "@/lib/mdx";
+import { renderMdx } from "@/lib/mdx";
 
 /**
  * 文章內容渲染元件
  * 支援 MDX 與 HTML 兩種格式
  */
 async function BlogContent({ content }: { content: string }) {
-  // 如果內容是 HTML，直接渲染
-  if (isHtmlContent(content)) {
-    return (
-      <div
-        className="prose prose-lg max-w-none"
-        dangerouslySetInnerHTML={{ __html: content }}
-      />
-    );
-  }
-
-  // 使用 MDX 渲染
   const mdxContent = await renderMdx(content);
   return <div className="prose prose-lg max-w-none">{mdxContent}</div>;
 }
