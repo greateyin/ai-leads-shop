@@ -79,43 +79,44 @@ export function CheckoutForm({ onSubmit, isSubmitting, isGuest = false }: Checko
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-8 animate-fade-in-up">
             {/* Guest Info Section */}
             {isGuest && (
-                <div className="space-y-4 bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                    <h3 className="text-lg font-semibold border-b border-blue-200 dark:border-blue-800 pb-2 flex items-center gap-2">
-                        <Mail className="h-5 w-5" />
+                <div className="space-y-6 bg-secondary/30 p-6 rounded-2xl border border-border/50 backdrop-blur-sm">
+                    <h3 className="text-xl font-bold flex items-center gap-3 text-primary">
+                        <div className="p-2 bg-primary/10 rounded-full">
+                            <Mail className="h-5 w-5" />
+                        </div>
                         訪客資訊
                     </h3>
-                    <p className="text-sm text-muted-foreground mb-4">
+                    <p className="text-sm text-muted-foreground">
                         請提供您的電子郵件，我們將發送訂單確認信給您。
                     </p>
-                    <div className="grid grid-cols-1 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="guestEmail" className="flex items-center gap-1">
-                                <Mail className="h-4 w-4" />
-                                電子郵件 <span className="text-red-500">*</span>
-                            </Label>
-                            <Input
-                                id="guestEmail"
-                                type="email"
-                                required
-                                placeholder="your@email.com"
-                                value={formData.guestEmail}
-                                onChange={(e) => handleGuestChange("guestEmail", e.target.value)}
-                                className="bg-white dark:bg-gray-900"
-                            />
-                        </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="guestEmail" className="flex items-center gap-1 font-medium">
+                            電子郵件 <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                            id="guestEmail"
+                            type="email"
+                            required
+                            placeholder="your@email.com"
+                            value={formData.guestEmail}
+                            onChange={(e) => handleGuestChange("guestEmail", e.target.value)}
+                            className="bg-background/80"
+                        />
                     </div>
                 </div>
             )}
 
-            <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
-                    <User className="h-5 w-5" />
+            <div className="space-y-6">
+                <h3 className="text-xl font-bold flex items-center gap-3 border-b pb-4">
+                    <div className="p-2 bg-secondary rounded-full">
+                        <User className="h-5 w-5 text-primary" />
+                    </div>
                     收件人資訊
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                         <Label htmlFor="contactName">姓名 <span className="text-red-500">*</span></Label>
                         <Input
@@ -128,7 +129,6 @@ export function CheckoutForm({ onSubmit, isSubmitting, isGuest = false }: Checko
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="phone" className="flex items-center gap-1">
-                            <Phone className="h-4 w-4" />
                             聯絡電話 <span className="text-red-500">*</span>
                         </Label>
                         <Input
@@ -142,9 +142,14 @@ export function CheckoutForm({ onSubmit, isSubmitting, isGuest = false }: Checko
                 </div>
             </div>
 
-            <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-b pb-2">配送地址</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-6">
+                <h3 className="text-xl font-bold flex items-center gap-3 border-b pb-4">
+                    <div className="p-2 bg-secondary rounded-full">
+                        <svg className="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    </div>
+                    配送地址
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                         <Label htmlFor="postalCode">郵遞區號 <span className="text-red-500">*</span></Label>
                         <Input
@@ -188,11 +193,17 @@ export function CheckoutForm({ onSubmit, isSubmitting, isGuest = false }: Checko
                 </div>
             </div>
 
-            <div className="pt-4">
-                <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+            <div className="pt-8">
+                <Button
+                    type="submit"
+                    size="lg"
+                    variant="gradient"
+                    className="w-full h-12 text-lg rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all hover:-translate-y-0.5"
+                    disabled={isSubmitting}
+                >
                     {isSubmitting ? (
                         <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                             處理中...
                         </>
                     ) : (
@@ -200,7 +211,7 @@ export function CheckoutForm({ onSubmit, isSubmitting, isGuest = false }: Checko
                     )}
                 </Button>
                 {isGuest && (
-                    <p className="text-xs text-muted-foreground text-center mt-2">
+                    <p className="text-xs text-muted-foreground text-center mt-4">
                         完成結帳後，您可以選擇註冊帳號以追蹤訂單狀態
                     </p>
                 )}

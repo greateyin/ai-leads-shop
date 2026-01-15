@@ -236,15 +236,15 @@ export default function CheckoutPage() {
     // Error state
     if (error) {
         return (
-            <div className="container mx-auto px-4 py-16 max-w-xl text-center">
-                <div className="bg-red-50 dark:bg-red-950/20 p-8 rounded-lg border border-red-200 dark:border-red-800">
-                    <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <AlertCircle className="h-8 w-8 text-white" />
+            <div className="container mx-auto px-4 py-20 max-w-xl text-center min-h-[60vh] flex flex-col justify-center animate-fade-in">
+                <div className="bg-card p-8 rounded-3xl border border-red-200/50 shadow-2xl shadow-red-500/10 dark:border-red-800/50">
+                    <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <AlertCircle className="h-10 w-10 text-red-600 dark:text-red-400" />
                     </div>
                     <h1 className="text-2xl font-bold text-red-700 dark:text-red-400 mb-4">
                         {error}
                     </h1>
-                    <Button asChild className="mt-4">
+                    <Button asChild className="mt-6 rounded-full" size="lg">
                         <Link href="/">回到首頁</Link>
                     </Button>
                 </div>
@@ -255,28 +255,40 @@ export default function CheckoutPage() {
     // Success state
     if (orderSuccess) {
         return (
-            <div className="container mx-auto px-4 py-16 max-w-xl text-center">
-                <div className="bg-green-50 dark:bg-green-950/20 p-8 rounded-lg border border-green-200 dark:border-green-800">
-                    <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <ShoppingBag className="h-8 w-8 text-white" />
+            <div className="container mx-auto px-4 py-20 max-w-xl text-center min-h-[60vh] flex flex-col justify-center animate-fade-in-up">
+                <div className="bg-card p-10 rounded-3xl border border-border/50 shadow-2xl shadow-primary/10 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary to-accent"></div>
+
+                    <div className="w-24 h-24 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-8 animate-bounce">
+                        <ShoppingBag className="h-12 w-12 text-green-600 dark:text-green-400" />
                     </div>
-                    <h1 className="text-2xl font-bold text-green-700 dark:text-green-400 mb-4">
+
+                    <h1 className="text-3xl font-bold text-foreground mb-4">
                         訂單建立成功！
                     </h1>
-                    <p className="text-lg mb-2">訂單編號：<span className="font-mono font-bold">{orderSuccess.orderNo}</span></p>
+                    <p className="text-muted-foreground text-lg mb-8">
+                        感謝您的購買，您的訂單已經確認。
+                    </p>
 
-                    {orderSuccess.isGuestOrder && orderSuccess.guestEmail && (
-                        <p className="text-muted-foreground mb-6">
-                            訂單確認信已發送至 <span className="font-medium">{orderSuccess.guestEmail}</span>
-                        </p>
-                    )}
+                    <div className="bg-secondary/30 rounded-xl p-6 mb-8 text-left space-y-3">
+                        <div className="flex justify-between">
+                            <span className="text-muted-foreground">訂單編號</span>
+                            <span className="font-mono font-bold text-primary">{orderSuccess.orderNo}</span>
+                        </div>
+                        {orderSuccess.isGuestOrder && orderSuccess.guestEmail && (
+                            <div className="flex justify-between flex-wrap gap-2">
+                                <span className="text-muted-foreground">確認信箱</span>
+                                <span className="font-medium">{orderSuccess.guestEmail}</span>
+                            </div>
+                        )}
+                    </div>
 
-                    <div className="flex flex-col gap-3 mt-8">
-                        <Button asChild>
+                    <div className="flex flex-col gap-4">
+                        <Button asChild size="lg" variant="gradient" className="rounded-full shadow-lg hover:shadow-primary/25">
                             <Link href="/">繼續購物</Link>
                         </Button>
                         {orderSuccess.isGuestOrder && (
-                            <Button variant="outline" asChild>
+                            <Button variant="outline" asChild className="rounded-full border-2">
                                 <Link href="/register" className="flex items-center gap-2">
                                     <LogIn className="h-4 w-4" />
                                     註冊帳號以追蹤訂單
@@ -292,25 +304,27 @@ export default function CheckoutPage() {
     if (!cart) return null;
 
     return (
-        <div className="container mx-auto px-4 py-8 max-w-4xl">
-            <h1 className="text-3xl font-bold mb-8 text-center">結帳</h1>
+        <div className="container mx-auto px-4 py-12 md:py-20 max-w-6xl min-h-screen">
+            <h1 className="text-4xl md:text-5xl font-bold mb-12 text-center bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent animate-fade-in-up">
+                結帳
+            </h1>
 
             {/* Guest checkout notice */}
             {isGuest && (
-                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-8 text-center">
-                    <p className="text-amber-800 dark:text-amber-200">
-                        您目前以訪客身份結帳。
-                        <Link href="/login?callbackUrl=/checkout" className="underline font-medium ml-1">
+                <div className="max-w-4xl mx-auto bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-800/50 rounded-2xl p-4 mb-10 text-center animate-fade-in backdrop-blur-sm">
+                    <p className="text-amber-800 dark:text-amber-200 font-medium">
+                        👋 您目前以訪客身份結帳。
+                        <Link href="/login?callbackUrl=/checkout" className="underline font-bold ml-1 hover:text-amber-600">
                             登入帳號
                         </Link>
-                        以便追蹤訂單。
+                        以便累積點數與查詢訂單。
                     </p>
                 </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
                 {/* Left: Form */}
-                <div>
+                <div className="lg:col-span-7 lg:sticky lg:top-24">
                     <CheckoutForm
                         onSubmit={handleCheckout}
                         isSubmitting={isSubmitting}
@@ -319,19 +333,56 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Right: Summary */}
-                <div className="bg-muted/30 p-6 rounded-lg h-fit border">
-                    <h2 className="text-xl font-semibold mb-4">訂單明細</h2>
-                    <div className="space-y-4 mb-6">
-                        {cart.items.map((item, index) => (
-                            <div key={item.productId + (item.variantId || "") + index} className="flex justify-between text-sm">
-                                <span>{item.name} x {item.quantity}</span>
-                                <span>{formatCurrency(item.price * item.quantity)}</span>
+                <div className="lg:col-span-5 animate-fade-in opacity-0 [animation-delay:200ms]">
+                    <div className="bg-card rounded-3xl shadow-xl shadow-muted/60 border border-border/50 overflow-hidden sticky top-24">
+                        <div className="p-6 bg-secondary/30 border-b border-border/50">
+                            <h2 className="text-xl font-bold flex items-center gap-2">
+                                <ShoppingBag className="h-5 w-5 text-primary" />
+                                訂單明細
+                            </h2>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                                {cart.items.map((item, index) => (
+                                    <div key={item.productId + (item.variantId || "") + index} className="flex gap-4 items-start group">
+                                        <div className="w-16 h-16 rounded-xl bg-muted overflow-hidden flex-shrink-0 border border-border">
+                                            {item.imageUrl ? (
+                                                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">無圖</div>
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="font-medium text-sm line-clamp-2 group-hover:text-primary transition-colors">{item.name}</h4>
+                                            <div className="text-xs text-muted-foreground mt-1">數量: {item.quantity}</div>
+                                        </div>
+                                        <div className="text-right font-medium text-sm">
+                                            {formatCurrency(item.price * item.quantity)}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
-                    <div className="border-t pt-4 flex justify-between font-bold text-lg">
-                        <span>總金額</span>
-                        <span>{formatCurrency(cart.total)}</span>
+
+                            <div className="pt-6 border-t border-border border-dashed space-y-3">
+                                <div className="flex justify-between text-muted-foreground">
+                                    <span>小計</span>
+                                    <span>{formatCurrency(cart.total)}</span>
+                                </div>
+                                <div className="flex justify-between text-muted-foreground">
+                                    <span>運費</span>
+                                    <span>免運費</span>
+                                </div>
+                                <div className="flex justify-between font-bold text-2xl pt-2 text-primary">
+                                    <span>總金額</span>
+                                    <span>{formatCurrency(cart.total)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-secondary/20 text-xs text-center text-muted-foreground border-t border-border/50">
+                            加密連線，安全支付
+                        </div>
                     </div>
                 </div>
             </div>

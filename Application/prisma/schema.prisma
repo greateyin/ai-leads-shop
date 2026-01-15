@@ -311,6 +311,7 @@ model Product {
   @@unique([shopId, slug])
   @@unique([shopId, sku])
   @@index([tenantId])
+  @@index([status]) // Public product queries
   @@index([deletedAt])
   @@map("products")
 }
@@ -445,6 +446,8 @@ model Order {
 
   @@index([tenantId])
   @@index([orderNo])
+  @@index([status]) // Filter by order status
+  @@index([userId]) // User order queries
   @@index([createdAt]) // Time-based queries for reports (spec 3.2)
   @@map("orders")
 }

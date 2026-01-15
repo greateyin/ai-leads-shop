@@ -13,7 +13,7 @@ export interface OpenGraphMetaProps {
   /** 頁面 URL */
   url: string;
   /** 內容類型 */
-  type?: "website" | "article" | "product";
+  type?: "website" | "article";
   /** 網站名稱 */
   siteName?: string;
   /** 文章作者 (僅 article 類型) */
@@ -81,8 +81,8 @@ export function generateOpenGraphMetadata(props: OpenGraphMetaProps) {
     },
   };
 
-  // 商品結構化資料
-  if (type === "product" && price) {
+  // 商品結構化資料 (價格)
+  if (price) {
     metadata.other = {
       "product:price:amount": price.toString(),
       "product:price:currency": currency,
@@ -144,8 +144,8 @@ export function generateProductOpenGraph(product: {
     : baseUrl;
   const shopSlug = product.shop?.slug || "shop";
 
-  const priceValue = typeof product.price === "number" 
-    ? product.price 
+  const priceValue = typeof product.price === "number"
+    ? product.price
     : parseFloat(product.price.toString());
 
   return generateOpenGraphMetadata({
@@ -153,7 +153,7 @@ export function generateProductOpenGraph(product: {
     description: product.ogDescription || product.summary || undefined,
     imageUrl: product.ogImageUrl || product.coverImageUrl || undefined,
     url: `${tenantUrl}/products/${product.slug}`,
-    type: "product",
+    type: "website", // Next.js doesn't support "product" type
     price: priceValue,
     currency: "TWD",
   });

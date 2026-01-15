@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { TrackingScripts } from "@/components/tracking/tracking-scripts";
+import { PublicHeader } from "@/components/layout/public-header";
 
 /**
  * 取得租戶追蹤設定
@@ -47,6 +48,9 @@ export default async function PublicLayout({
           lineTagId={trackingSettings.lineTagId}
         />
       )}
+
+      {/* Header */}
+      <PublicHeader />
 
       {/* 頁面內容 */}
       <main className="min-h-screen">{children}</main>

@@ -18,79 +18,79 @@ import { ReactNode } from "react";
 const mdxComponents: MDXRemoteProps["components"] = {
     // Enhanced heading styles
     h1: ({ children }) => (
-        <h1 className= "text-3xl font-bold mt-8 mb-4" > { children } </h1>
+        <h1 className="text-3xl font-bold mt-8 mb-4">{children}</h1>
     ),
-h2: ({ children }) => (
-    <h2 className= "text-2xl font-bold mt-6 mb-3" > { children } </h2>
+    h2: ({ children }) => (
+        <h2 className="text-2xl font-bold mt-6 mb-3">{children}</h2>
     ),
-h3: ({ children }) => (
-    <h3 className= "text-xl font-semibold mt-4 mb-2" > { children } </h3>
-    ),
-
-// Enhanced paragraph and text
-p: ({ children }) => <p className="mb-4 leading-relaxed" > { children } </p>,
-
-// Enhanced links
-a: ({ href, children }) => (
-    <a
-            href= { href }
-className = "text-primary hover:underline"
-target = { href?.startsWith("http") ?"_blank": undefined }
-rel = { href?.startsWith("http") ?"noopener noreferrer": undefined }
-    >
-    { children }
-    </a>
+    h3: ({ children }) => (
+        <h3 className="text-xl font-semibold mt-4 mb-2">{children}</h3>
     ),
 
-// Enhanced code blocks
-pre: ({ children }) => (
-    <pre className= "bg-muted p-4 rounded-lg overflow-x-auto my-4" >
-    { children }
-    </pre>
-    ),
-code: ({ children }) => (
-    <code className= "bg-muted px-1.5 py-0.5 rounded text-sm" > { children } </code>
-    ),
+    // Enhanced paragraph and text
+    p: ({ children }) => <p className="mb-4 leading-relaxed">{children}</p>,
 
-// Enhanced lists
-ul: ({ children }) => <ul className="list-disc pl-6 mb-4" > { children } </ul>,
-ol: ({ children }) => <ol className="list-decimal pl-6 mb-4" > { children } </ol>,
-li: ({ children }) => <li className="mb-1" > { children } </li>,
-
-// Enhanced blockquotes
-blockquote: ({ children }) => (
-    <blockquote className= "border-l-4 border-primary pl-4 italic my-4" >
-    { children }
-    </blockquote>
+    // Enhanced links
+    a: ({ href, children }) => (
+        <a
+            href={href}
+            className="text-primary hover:underline"
+            target={href?.startsWith("http") ? "_blank" : undefined}
+            rel={href?.startsWith("http") ? "noopener noreferrer" : undefined}
+        >
+            {children}
+        </a>
     ),
 
-// Enhanced images
-img: ({ src, alt }) => (
-    <img
-            src= { src }
-alt = { alt || ""}
-className = "rounded-lg max-w-full h-auto my-4"
-loading = "lazy"
-    />
+    // Enhanced code blocks
+    pre: ({ children }) => (
+        <pre className="bg-muted p-4 rounded-lg overflow-x-auto my-4">
+            {children}
+        </pre>
+    ),
+    code: ({ children }) => (
+        <code className="bg-muted px-1.5 py-0.5 rounded text-sm">{children}</code>
     ),
 
-// Enhanced tables
-table: ({ children }) => (
-    <div className= "overflow-x-auto my-4" >
-    <table className="min-w-full border-collapse" > { children } </table>
+    // Enhanced lists
+    ul: ({ children }) => <ul className="list-disc pl-6 mb-4">{children}</ul>,
+    ol: ({ children }) => <ol className="list-decimal pl-6 mb-4">{children}</ol>,
+    li: ({ children }) => <li className="mb-1">{children}</li>,
+
+    // Enhanced blockquotes
+    blockquote: ({ children }) => (
+        <blockquote className="border-l-4 border-primary pl-4 italic my-4">
+            {children}
+        </blockquote>
+    ),
+
+    // Enhanced images
+    img: ({ src, alt }) => (
+        <img
+            src={src}
+            alt={alt || ""}
+            className="rounded-lg max-w-full h-auto my-4"
+            loading="lazy"
+        />
+    ),
+
+    // Enhanced tables
+    table: ({ children }) => (
+        <div className="overflow-x-auto my-4">
+            <table className="min-w-full border-collapse">{children}</table>
         </div>
     ),
-th: ({ children }) => (
-    <th className= "border border-muted-foreground/20 px-4 py-2 bg-muted font-semibold text-left" >
-    { children }
-    </th>
+    th: ({ children }) => (
+        <th className="border border-muted-foreground/20 px-4 py-2 bg-muted font-semibold text-left">
+            {children}
+        </th>
     ),
-td: ({ children }) => (
-    <td className= "border border-muted-foreground/20 px-4 py-2" > { children } </td>
+    td: ({ children }) => (
+        <td className="border border-muted-foreground/20 px-4 py-2">{children}</td>
     ),
 
-// Horizontal rule
-hr: () => <hr className="my-8 border-muted-foreground/20" />,
+    // Horizontal rule
+    hr: () => <hr className="my-8 border-muted-foreground/20" />,
 };
 
 /**
@@ -123,26 +123,25 @@ export async function renderMdx(source: string): Promise<ReactNode> {
     try {
         return (
             <MDXRemote
-                source= { source }
-        components = { mdxComponents }
-        options = {{
-            parseFrontmatter: false,
-                mdxOptions: {
-                development: process.env.NODE_ENV === "development",
+                source={source}
+                components={mdxComponents}
+                options={{
+                    parseFrontmatter: false,
+                    mdxOptions: {
+                        development: process.env.NODE_ENV === "development",
                     },
-        }
-    }
+                }}
             />
         );
-} catch (error) {
-    console.error("MDX rendering error:", error);
-    // Fallback to plain text if MDX parsing fails
-    return (
-        <div className= "prose prose-lg max-w-none" >
-        <pre className="whitespace-pre-wrap" > { source } </pre>
+    } catch (error) {
+        console.error("MDX rendering error:", error);
+        // Fallback to plain text if MDX parsing fails
+        return (
+            <div className="prose prose-lg max-w-none">
+                <pre className="whitespace-pre-wrap">{source}</pre>
             </div>
         );
-}
+    }
 }
 
 /**
@@ -163,24 +162,22 @@ export async function renderMdxWithComponents(
     try {
         return (
             <MDXRemote
-                source= { source }
-        components = {{ ...mdxComponents, ...customComponents }
-    }
-                options = {{
-        parseFrontmatter: false,
-            mdxOptions: {
-            development: process.env.NODE_ENV === "development",
+                source={source}
+                components={{ ...mdxComponents, ...customComponents }}
+                options={{
+                    parseFrontmatter: false,
+                    mdxOptions: {
+                        development: process.env.NODE_ENV === "development",
                     },
-    }
-}
+                }}
             />
         );
     } catch (error) {
-    console.error("MDX rendering error:", error);
-    return (
-        <div className= "prose prose-lg max-w-none" >
-        <pre className="whitespace-pre-wrap" > { source } </pre>
+        console.error("MDX rendering error:", error);
+        return (
+            <div className="prose prose-lg max-w-none">
+                <pre className="whitespace-pre-wrap">{source}</pre>
             </div>
         );
-}
+    }
 }
