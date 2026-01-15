@@ -429,6 +429,7 @@ model Order {
   taxAmount      Decimal        @default(0) @db.Decimal(12, 2)
   paymentStatus  PaymentStatus  @default(PENDING)
   shippingStatus ShippingStatus @default(PENDING)
+  metadata       Json?          /// Store guest info (guestEmail, guestPhone, guestName) for guest checkout
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -477,7 +478,7 @@ model OrderItem {
 model Address {
   id           String      @id @db.Uuid
   tenantId     String      @db.Uuid
-  userId       String      @db.Uuid // Required per spec 3.1
+  userId       String?     @db.Uuid // Optional for guest checkout (spec section 3.1: user_id nullable)
   orderId      String?     @db.Uuid
   type         AddressType @default(SHIPPING)
   contactName  String
@@ -493,7 +494,7 @@ model Address {
 
   // Relations
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
   order  Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])

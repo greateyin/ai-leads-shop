@@ -154,6 +154,7 @@ export async function PUT(
         "price",
         "cost",
         "stock",
+        "coverImageUrl",
         "ogTitle",
         "ogDescription",
         "ogImageUrl",

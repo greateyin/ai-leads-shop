@@ -1,119 +1,186 @@
-import { compileMDX } from "next-mdx-remote/rsc";
-import { ReactNode, ComponentProps } from "react";
+/**
+ * MDX Rendering Utilities
+ *
+ * This module provides utilities for rendering MDX content in blog posts
+ * and other content areas, replacing dangerouslySetInnerHTML with proper
+ * MDX rendering as specified in program_spec.md.
+ *
+ * Uses next-mdx-remote for server-side MDX rendering.
+ */
+
+import { MDXRemote, MDXRemoteProps } from "next-mdx-remote/rsc";
+import { ReactNode } from "react";
 
 /**
- * MDX 自訂元件
- * 使用原生 HTML 元素 props 類型來確保類型安全
+ * Custom components for MDX rendering
+ * Add any custom components you want to make available in MDX here
  */
-const components = {
-  // 標題樣式
-  h1: (props: ComponentProps<"h1">) => (
-    <h1 className="text-4xl font-bold mt-8 mb-4" {...props} />
-  ),
-  h2: (props: ComponentProps<"h2">) => (
-    <h2 className="text-3xl font-semibold mt-6 mb-3" {...props} />
-  ),
-  h3: (props: ComponentProps<"h3">) => (
-    <h3 className="text-2xl font-medium mt-4 mb-2" {...props} />
-  ),
-  // 段落
-  p: (props: ComponentProps<"p">) => (
-    <p className="mb-4 leading-relaxed" {...props} />
-  ),
-  // 列表
-  ul: (props: ComponentProps<"ul">) => (
-    <ul className="list-disc list-inside mb-4 space-y-1" {...props} />
-  ),
-  ol: (props: ComponentProps<"ol">) => (
-    <ol className="list-decimal list-inside mb-4 space-y-1" {...props} />
-  ),
-  li: (props: ComponentProps<"li">) => (
-    <li className="ml-4" {...props} />
-  ),
-  // 連結
-  a: (props: ComponentProps<"a">) => (
+const mdxComponents: MDXRemoteProps["components"] = {
+    // Enhanced heading styles
+    h1: ({ children }) => (
+        <h1 className= "text-3xl font-bold mt-8 mb-4" > { children } </h1>
+    ),
+h2: ({ children }) => (
+    <h2 className= "text-2xl font-bold mt-6 mb-3" > { children } </h2>
+    ),
+h3: ({ children }) => (
+    <h3 className= "text-xl font-semibold mt-4 mb-2" > { children } </h3>
+    ),
+
+// Enhanced paragraph and text
+p: ({ children }) => <p className="mb-4 leading-relaxed" > { children } </p>,
+
+// Enhanced links
+a: ({ href, children }) => (
     <a
-      className="text-primary hover:underline"
-      target={props.href?.startsWith("http") ? "_blank" : undefined}
-      rel={props.href?.startsWith("http") ? "noopener noreferrer" : undefined}
-      {...props}
-    />
-  ),
-  // 程式碼區塊
-  pre: (props: ComponentProps<"pre">) => (
-    <pre className="bg-muted p-4 rounded-lg overflow-x-auto mb-4 text-sm" {...props} />
-  ),
-  code: (props: ComponentProps<"code">) => (
-    <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono" {...props} />
-  ),
-  // 引用
-  blockquote: (props: ComponentProps<"blockquote">) => (
-    <blockquote className="border-l-4 border-primary pl-4 italic my-4 text-muted-foreground" {...props} />
-  ),
-  // 圖片
-  img: (props: ComponentProps<"img">) => (
+            href= { href }
+className = "text-primary hover:underline"
+target = { href?.startsWith("http") ?"_blank": undefined }
+rel = { href?.startsWith("http") ?"noopener noreferrer": undefined }
+    >
+    { children }
+    </a>
+    ),
+
+// Enhanced code blocks
+pre: ({ children }) => (
+    <pre className= "bg-muted p-4 rounded-lg overflow-x-auto my-4" >
+    { children }
+    </pre>
+    ),
+code: ({ children }) => (
+    <code className= "bg-muted px-1.5 py-0.5 rounded text-sm" > { children } </code>
+    ),
+
+// Enhanced lists
+ul: ({ children }) => <ul className="list-disc pl-6 mb-4" > { children } </ul>,
+ol: ({ children }) => <ol className="list-decimal pl-6 mb-4" > { children } </ol>,
+li: ({ children }) => <li className="mb-1" > { children } </li>,
+
+// Enhanced blockquotes
+blockquote: ({ children }) => (
+    <blockquote className= "border-l-4 border-primary pl-4 italic my-4" >
+    { children }
+    </blockquote>
+    ),
+
+// Enhanced images
+img: ({ src, alt }) => (
     <img
-      className="rounded-lg max-w-full h-auto my-4"
-      alt=""
-      {...props}
+            src= { src }
+alt = { alt || ""}
+className = "rounded-lg max-w-full h-auto my-4"
+loading = "lazy"
     />
-  ),
-  // 分隔線
-  hr: () => <hr className="my-8 border-border" />,
-  // 表格
-  table: (props: ComponentProps<"table">) => (
-    <div className="overflow-x-auto my-4">
-      <table className="min-w-full border-collapse border border-border" {...props} />
-    </div>
-  ),
-  th: (props: ComponentProps<"th">) => (
-    <th className="border border-border px-4 py-2 bg-muted font-semibold text-left" {...props} />
-  ),
-  td: (props: ComponentProps<"td">) => (
-    <td className="border border-border px-4 py-2" {...props} />
-  ),
+    ),
+
+// Enhanced tables
+table: ({ children }) => (
+    <div className= "overflow-x-auto my-4" >
+    <table className="min-w-full border-collapse" > { children } </table>
+        </div>
+    ),
+th: ({ children }) => (
+    <th className= "border border-muted-foreground/20 px-4 py-2 bg-muted font-semibold text-left" >
+    { children }
+    </th>
+    ),
+td: ({ children }) => (
+    <td className= "border border-muted-foreground/20 px-4 py-2" > { children } </td>
+    ),
+
+// Horizontal rule
+hr: () => <hr className="my-8 border-muted-foreground/20" />,
 };
 
 /**
- * 渲染 MDX 內容
- * 
- * @param content - MDX 格式的字串
- * @returns Promise<ReactNode> - 渲染後的 React 元件
- * 
- * @example
- * const content = await renderMdx("# Hello World\n\nThis is **MDX**!");
- * return <div>{content}</div>;
+ * Check if content appears to be HTML (starts with a tag)
  */
-export async function renderMdx(content: string): Promise<ReactNode> {
-  try {
-    const { content: mdxContent } = await compileMDX({
-      source: content,
-      components,
-      options: {
-        parseFrontmatter: false,
-      },
-    });
-    return mdxContent;
-  } catch (error) {
-    console.error("MDX 渲染錯誤:", error);
-    // 降級處理：直接顯示純文字
+export function isHtmlContent(content: string): boolean {
+    const trimmed = content.trim();
+    // Check if it starts with a common HTML tag
     return (
-      <div className="prose prose-lg max-w-none">
-        <pre className="whitespace-pre-wrap">{content}</pre>
-      </div>
+        trimmed.startsWith("<!DOCTYPE") ||
+        trimmed.startsWith("<html") ||
+        trimmed.startsWith("<div") ||
+        trimmed.startsWith("<p>") ||
+        trimmed.startsWith("<article") ||
+        trimmed.startsWith("<section")
     );
-  }
 }
 
 /**
- * 檢查內容是否為 HTML (而非 MDX)
- * 用於兼容性處理：若資料庫中儲存的是 HTML，則跳過 MDX 渲染
+ * Render MDX content to React elements
+ *
+ * @param source - MDX/Markdown source string
+ * @returns Rendered React component
  */
-export function isHtmlContent(content: string): boolean {
-  const htmlPatterns = [
-    /^<[!?]?[a-zA-Z]/,  // 以 HTML 標籤開頭
-    /<\/[a-zA-Z]+>/,    // 包含結束標籤
-    /<!DOCTYPE/i,       // DOCTYPE 宣告
-  ];
-  return htmlPatterns.some((pattern) => pattern.test(content.trim()));
+export async function renderMdx(source: string): Promise<ReactNode> {
+    if (!source) {
+        return null;
+    }
+
+    try {
+        return (
+            <MDXRemote
+                source= { source }
+        components = { mdxComponents }
+        options = {{
+            parseFrontmatter: false,
+                mdxOptions: {
+                development: process.env.NODE_ENV === "development",
+                    },
+        }
+    }
+            />
+        );
+} catch (error) {
+    console.error("MDX rendering error:", error);
+    // Fallback to plain text if MDX parsing fails
+    return (
+        <div className= "prose prose-lg max-w-none" >
+        <pre className="whitespace-pre-wrap" > { source } </pre>
+            </div>
+        );
+}
+}
+
+/**
+ * Render MDX content with custom components
+ *
+ * @param source - MDX/Markdown source string
+ * @param customComponents - Additional custom components
+ * @returns Rendered React component
+ */
+export async function renderMdxWithComponents(
+    source: string,
+    customComponents?: MDXRemoteProps["components"]
+): Promise<ReactNode> {
+    if (!source) {
+        return null;
+    }
+
+    try {
+        return (
+            <MDXRemote
+                source= { source }
+        components = {{ ...mdxComponents, ...customComponents }
+    }
+                options = {{
+        parseFrontmatter: false,
+            mdxOptions: {
+            development: process.env.NODE_ENV === "development",
+                    },
+    }
+}
+            />
+        );
+    } catch (error) {
+    console.error("MDX rendering error:", error);
+    return (
+        <div className= "prose prose-lg max-w-none" >
+        <pre className="whitespace-pre-wrap" > { source } </pre>
+            </div>
+        );
+}
 }

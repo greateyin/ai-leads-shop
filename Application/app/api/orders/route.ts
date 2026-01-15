@@ -7,6 +7,7 @@ import { generateId } from "@/lib/id";
 
 /**
  * 訂單建立 Schema
+ * 支援登入用戶和訪客結帳 (Guest Checkout)
  */
 const createOrderSchema = z.object({
   items: z.array(
@@ -16,6 +17,11 @@ const createOrderSchema = z.object({
       quantity: z.number().int().min(1),
     })
   ),
+  // Guest checkout fields (required if not logged in)
+  guestEmail: z.string().email().optional(),
+  guestPhone: z.string().optional(),
+  guestName: z.string().optional(),
+  // Shipping address
   shippingAddressId: z.string().optional(),
   shippingAddress: z
     .object({
@@ -28,6 +34,8 @@ const createOrderSchema = z.object({
     })
     .optional(),
   paymentProvider: z.enum(["ECPAY", "NEWEBPAY", "STRIPE"]).optional(),
+  // Shop ID for guest checkout (since we don't have session.user.tenantId)
+  shopSlug: z.string().optional(),
 });
 
 /**
@@ -93,18 +101,11 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/orders
- * 建立新訂單
+ * 建立新訂單 - 支援登入用戶和訪客結帳 (Guest Checkout)
  */
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user?.tenantId) {
-      return NextResponse.json(
-        { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
     const validation = createOrderSchema.safeParse(body);
 
@@ -118,31 +119,115 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { items, shippingAddress } = validation.data;
+    const {
+      items,
+      shippingAddress,
+      guestEmail,
+      guestPhone,
+      guestName,
+      shopSlug,
+    } = validation.data;
 
-    // 取得商店
-    const shop = await db.shop.findFirst({
-      where: { tenantId: session.user.tenantId },
-    });
+    // Determine if this is a guest checkout or authenticated checkout
+    const isGuestCheckout = !session?.user?.tenantId;
 
-    if (!shop) {
-      return NextResponse.json(
-        { success: false, error: { code: "NOT_FOUND", message: "找不到商店" } },
-        { status: 404 }
-      );
+    // For guest checkout, we need either shopSlug or the shop context
+    let shop;
+    let tenantId: string;
+    let userId: string | null = null;
+
+    if (isGuestCheckout) {
+      // Guest checkout - require guestEmail for order tracking
+      if (!guestEmail) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "INVALID_INPUT",
+              message: "訪客結帳需要提供電子郵件",
+            },
+          },
+          { status: 400 }
+        );
+      }
+
+      // Find shop by slug or get the first available public shop
+      if (shopSlug) {
+        shop = await db.shop.findFirst({
+          where: { slug: shopSlug },
+          include: { tenant: true },
+        });
+      } else {
+        // Try to get shop from product's tenant
+        const firstProductId = items[0]?.productId;
+        if (firstProductId) {
+          const product = await db.product.findFirst({
+            where: { id: firstProductId },
+            include: { shop: { include: { tenant: true } } },
+          });
+          shop = product?.shop;
+        }
+      }
+
+      if (!shop) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: { code: "NOT_FOUND", message: "找不到商店" },
+          },
+          { status: 404 }
+        );
+      }
+
+      tenantId = shop.tenantId;
+    } else {
+      // Authenticated checkout
+      tenantId = session!.user.tenantId;
+      userId = session!.user.id;
+
+      shop = await db.shop.findFirst({
+        where: { tenantId },
+      });
+
+      if (!shop) {
+        return NextResponse.json(
+          { success: false, error: { code: "NOT_FOUND", message: "找不到商店" } },
+          { status: 404 }
+        );
+      }
     }
 
     // 取得商品資訊並計算金額
     const productIds = items.map((i) => i.productId);
     const products = await db.product.findMany({
-      where: { id: { in: productIds }, tenantId: session.user.tenantId },
+      where: {
+        id: { in: productIds },
+        tenantId,
+        status: "PUBLISHED", // Only allow orders for published products
+      },
       include: { variants: true },
     });
 
+    // Validate all products exist and are available
+    for (const item of items) {
+      const product = products.find((p) => p.id === item.productId);
+      if (!product) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "NOT_FOUND",
+              message: `商品 ${item.productId} 不存在或未上架`,
+            },
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     let totalAmount = 0;
     const orderItems = items.map((item) => {
-      const product = products.find((p) => p.id === item.productId);
-      if (!product) throw new Error(`商品 ${item.productId} 不存在`);
+      const product = products.find((p) => p.id === item.productId)!;
 
       const variant = item.variantId
         ? product.variants.find((v) => v.id === item.variantId)
@@ -154,7 +239,7 @@ export async function POST(request: NextRequest) {
 
       return {
         id: generateId(),
-        tenantId: session.user.tenantId,
+        tenantId,
         productId: product.id,
         variantId: item.variantId,
         name: product.name,
@@ -169,19 +254,27 @@ export async function POST(request: NextRequest) {
     const order = await db.order.create({
       data: {
         id: generateId(),
-        tenantId: session.user.tenantId,
+        tenantId,
         shopId: shop.id,
-        userId: session.user.id,
+        userId, // null for guest checkout
         orderNo: generateOrderNo(),
         totalAmount,
         currency: shop.currency,
+        // Store guest info in metadata
+        ...(isGuestCheckout && {
+          metadata: {
+            guestEmail,
+            guestPhone: guestPhone || null,
+            guestName: guestName || shippingAddress?.contactName || null,
+          },
+        }),
         items: { create: orderItems },
         ...(shippingAddress && {
           addresses: {
             create: {
               id: generateId(),
-              tenantId: session.user.tenantId,
-              userId: session.user.id,
+              tenantId,
+              ...(userId && { userId }), // Only include userId if not null
               type: "SHIPPING",
               ...shippingAddress,
               country: "TW",
@@ -197,13 +290,21 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: order,
-      message: "訂單建立成功",
+      data: {
+        ...order,
+        isGuestOrder: isGuestCheckout,
+        guestEmail: isGuestCheckout ? guestEmail : undefined,
+      },
+      message: isGuestCheckout
+        ? "訂單建立成功，請查收確認郵件"
+        : "訂單建立成功",
     });
   } catch (error) {
     console.error("建立訂單錯誤:", error);
+    // Return more detailed error for debugging
+    const errorMessage = error instanceof Error ? error.message : "建立訂單失敗";
     return NextResponse.json(
-      { success: false, error: { code: "INTERNAL_ERROR", message: "建立訂單失敗" } },
+      { success: false, error: { code: "INTERNAL_ERROR", message: errorMessage } },
       { status: 500 }
     );
   }
