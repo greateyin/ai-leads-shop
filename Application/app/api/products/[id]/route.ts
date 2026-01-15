@@ -146,6 +146,38 @@ export async function PUT(
 
     const { categoryIds, ...updateData } = validation.data;
 
+    // 產品更新限制 Logic (Spec Section 4.3)
+    // 若產品已發布，僅允許特定欄位可編輯 (如價格、庫存、OG metadata)
+    if (existingProduct.status === "PUBLISHED") {
+      // 白名單：只有這些欄位可以在已發布狀態下修改
+      const allowedFieldsForPublished = [
+        "price",
+        "cost",
+        "stock",
+        "ogTitle",
+        "ogDescription",
+        "ogImageUrl",
+      ];
+
+      const attemptedChanges = Object.keys(updateData);
+      const disallowedChanges = attemptedChanges.filter(
+        (field) => !allowedFieldsForPublished.includes(field)
+      );
+
+      if (disallowedChanges.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "FORBIDDEN_UPDATE",
+              message: `已發布的商品僅可修改價格、庫存與 OG 設定。欲修改其他欄位 (${disallowedChanges.join(", ")}) 請先下架商品`,
+            },
+          },
+          { status: 422 }
+        );
+      }
+    }
+
     // 更新商品
     const product = await db.$transaction(async (tx) => {
       // 更新商品基本資料

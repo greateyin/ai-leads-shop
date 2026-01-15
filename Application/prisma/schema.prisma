@@ -69,6 +69,7 @@ model Tenant {
   trackingSettings           TrackingSettings?
   tenantInvites              TenantInvite[]
   ucpCheckoutSessions        UcpCheckoutSession[]
+  files                      File[]
 
   @@map("tenants")
 }
@@ -101,6 +102,7 @@ model User {
   auditLogs      AuditLog[]
   resetTokens    ResetToken[]
   tenantInvites  TenantInvite[]  @relation("InvitedBy")
+  uploadedFiles  File[]
 
   @@index([tenantId])
   @@map("users")
@@ -1001,6 +1003,88 @@ model FeatureFlag {
   @@unique([tenantId, key])
   @@index([key])
   @@map("feature_flags")
+}
+
+// ===========================================
+// 檔案儲存
+// ===========================================
+
+/// 檔案 - 統一的檔案儲存模型（支援 PostgreSQL bytea 或外部儲存）
+model File {
+  id         String         @id @db.Uuid
+  tenantId   String         @db.Uuid
+
+  // 檔案元資料
+  fileName   String         @db.VarChar(512)
+  mimeType   String         @db.VarChar(128)
+  fileSize   Int            /// 檔案大小 (bytes)
+
+  // 儲存選項
+  data       Bytes?         /// PostgreSQL bytea 二進位資料（外部儲存時為 null）
+  blobUrl    String?        /// 外部儲存 URL (R2/S3/Vercel Blob)
+
+  // 實體關聯
+  entityType FileEntityType /// 所屬實體類型
+  entityId   String?        @db.Uuid /// 關聯的實體 ID
+  fieldName  String?        @db.VarChar(64) /// 欄位名稱 (coverImage, asset 等)
+
+  // 稽核
+  uploadedBy String?        @db.Uuid
+  createdAt  DateTime       @default(now())
+
+  // Relations
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  uploader User?   @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([entityType, entityId])
+  @@map("files")
+}
+
+enum FileEntityType {
+  SHOP        /// 商店相關（Logo、Banner）
+  PRODUCT     /// 商品圖片/資產
+  BLOG        /// 部落格封面/附件
+  ORDER       /// 訂單相關（發票、標籤）
+  USER        /// 使用者頭像
+  SYSTEM      /// 系統檔案
+}
+
+/// 系統設定 - 全域設定（非租戶專屬）
+model SystemSettings {
+  id String @id @default("global") @db.VarChar(32) /// 單例模式，固定使用 "global"
+
+  // 儲存供應商設定
+  storageProvider StorageProvider @default(POSTGRES)
+
+  // Vercel Blob
+  blobReadWriteToken String?
+
+  // Cloudflare R2
+  r2AccountId        String?
+  r2AccessKeyId      String?
+  r2SecretAccessKey  String?
+  r2BucketName       String?
+  r2PublicUrl        String? /// 自訂網域或 R2.dev URL
+
+  // AWS S3
+  s3Region           String?
+  s3AccessKeyId      String?
+  s3SecretAccessKey  String?
+  s3BucketName       String?
+  s3Endpoint         String? /// S3 相容服務的自訂端點
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+enum StorageProvider {
+  POSTGRES     /// 儲存於 PostgreSQL bytea
+  CLOUDFLARE_R2
+  AWS_S3
+  VERCEL_BLOB
 }
 
 // ===========================================

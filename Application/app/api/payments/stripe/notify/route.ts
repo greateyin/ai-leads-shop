@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
                     if (payment) {
                         // 更新付款狀態
                         await db.payment.update({
-                            where: { id: payment.id, tenantId: payment.tenantId },
+                            where: { id: payment.id },
                             data: {
                                 status: "PAID",
                                 transactionNo: paymentIntentId,
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
 
                         // 更新訂單狀態
                         await db.order.update({
-                            where: { id: orderId, tenantId: payment.tenantId },
+                            where: { id: orderId },
                             data: {
                                 paymentStatus: "PAID",
                                 status: "PAID",
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
                         // 扣減庫存
                         const { deductStock } = await import("@/lib/stock");
                         const orderItems = await db.orderItem.findMany({
-                            where: { orderId, tenantId: payment.tenantId },
+                            where: { orderId },
                             select: { productId: true, variantId: true, quantity: true },
                         });
                         await deductStock(orderItems);
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
                         // 發送付款成功通知
                         try {
                             const order = await db.order.findFirst({
-                                where: { id: orderId, tenantId: payment.tenantId },
+                                where: { id: orderId },
                                 select: { orderNo: true, totalAmount: true, user: { select: { email: true } } },
                             });
                             if (order?.user?.email) {

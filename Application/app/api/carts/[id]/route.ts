@@ -32,7 +32,7 @@ export async function GET(
         const cartItem = await db.cartItem.findFirst({
             where: {
                 id,
-                tenantId: session.user.tenantId,
+                cart: { tenantId: session.user.tenantId },
             },
             include: {
                 product: {
@@ -126,7 +126,7 @@ export async function PUT(
         const cartItem = await db.cartItem.findFirst({
             where: {
                 id,
-                tenantId: session.user.tenantId,
+                cart: { tenantId: session.user.tenantId },
             },
             include: {
                 product: { select: { stock: true } },
@@ -150,14 +150,15 @@ export async function PUT(
             );
         }
 
-        // 更新數量 (tenantId 包含在 where 條件中)
-        await db.cartItem.updateMany({
-            where: { id, tenantId: session.user.tenantId },
+        // 更新數量 (通過 cartId 關聯驗證 tenant)
+        const cartId = cartItem.cartId;
+        await db.cartItem.update({
+            where: { id },
             data: { quantity },
         });
         // 重新取得更新後的資料
         const updatedItem = await db.cartItem.findFirst({
-            where: { id, tenantId: session.user.tenantId },
+            where: { id },
             include: {
                 product: {
                     select: {
@@ -228,7 +229,7 @@ export async function DELETE(
         const cartItem = await db.cartItem.findFirst({
             where: {
                 id,
-                tenantId: session.user.tenantId,
+                cart: { tenantId: session.user.tenantId },
             },
         });
 
@@ -239,9 +240,9 @@ export async function DELETE(
             );
         }
 
-        // 刪除項目 (tenantId 包含在 where 條件中)
-        await db.cartItem.deleteMany({
-            where: { id, tenantId: session.user.tenantId },
+        // 刪除項目
+        await db.cartItem.delete({
+            where: { id },
         });
 
         return NextResponse.json({

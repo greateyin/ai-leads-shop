@@ -142,7 +142,7 @@ export async function PUT(
       // 更新分類關聯
       if (categoryIds !== undefined) {
         await tx.blogCategoryAssignment.deleteMany({
-          where: { postId: id, tenantId: session.user.tenantId },
+          where: { postId: id },
         });
         if (categoryIds.length > 0) {
           await tx.blogCategoryAssignment.createMany({
@@ -159,7 +159,7 @@ export async function PUT(
       // 更新標籤關聯
       if (tagIds !== undefined) {
         await tx.blogTagAssignment.deleteMany({
-          where: { postId: id, tenantId: session.user.tenantId },
+          where: { postId: id },
         });
         if (tagIds.length > 0) {
           await tx.blogTagAssignment.createMany({

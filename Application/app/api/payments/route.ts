@@ -76,6 +76,10 @@ export async function GET(request: NextRequest) {
  * POST /api/payments
  * 建立付款交易
  */
+/**
+ * POST /api/payments
+ * 建立付款交易
+ */
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
@@ -101,7 +105,17 @@ export async function POST(request: NextRequest) {
 
     const { orderId, provider, returnUrl, notifyUrl } = validation.data;
 
-    // 取得訂單
+    // 0. Idempotency Check: 檢查是否已有相同訂單的待付款記錄
+    const existingPayment = await db.payment.findFirst({
+      where: {
+        tenantId: session.user.tenantId, // Ensure tenant scope scope
+        orderId,
+        provider,
+        status: { in: ["INITIATED", "PENDING"] },
+      },
+    });
+
+    // 1. 取得並驗證訂單
     const order = await db.order.findFirst({
       where: { id: orderId, tenantId: session.user.tenantId },
     });
@@ -113,31 +127,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 建立付款記錄
-    const payment = await db.payment.create({
-      data: {
-        id: generateId(),
-        tenantId: session.user.tenantId,
-        orderId,
-        provider,
-        amount: order.totalAmount,
-        currency: order.currency,
-        status: "INITIATED",
-      },
-    });
+    // 2. 取得租戶的金流配置 (Dynamic Config)
+    // 這裡需要將 string 轉為 PaymentProviderType，假設 input 驗證已通過 enum check
+    const { getProviderConfig } = await import("@/lib/payment");
+    const providerConfig = await getProviderConfig(session.user.tenantId, provider as any);
 
-    // 根據金流供應商產生交易
+    if (!providerConfig) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: { code: "CONFIG_MISSING", message: `尚未設定 ${provider} 金流資訊` }
+        },
+        { status: 400 }
+      );
+    }
+
+    // 3. 建立或使用現有付款記錄
+    let payment = existingPayment;
+    if (!payment) {
+      payment = await db.payment.create({
+        data: {
+          id: generateId(),
+          tenantId: session.user.tenantId,
+          orderId,
+          provider: provider as any,
+          amount: order.totalAmount,
+          currency: order.currency,
+          status: "INITIATED",
+        },
+      });
+    }
+
+    // 4. 根據金流供應商產生交易，傳入 DB config
     let result: { formHtml?: string; redirectUrl?: string; clientSecret?: string } = {};
+    let transactionNo = "";
+    let providerOrderNo = "";
 
     switch (provider) {
       case "ECPAY": {
         const { createTransaction } = await import("@/lib/payment/ecpay");
         const ecpayResult = await createTransaction(
           {
-            merchantId: process.env.ECPAY_MERCHANT_ID!,
-            hashKey: process.env.ECPAY_HASH_KEY!,
-            hashIV: process.env.ECPAY_HASH_IV!,
-            isProduction: process.env.NODE_ENV === "production",
+            merchantId: providerConfig.merchantId as string,
+            hashKey: providerConfig.hashKey as string,
+            hashIV: providerConfig.hashIV as string,
+            isProduction: providerConfig.isProduction === true || providerConfig.isProduction === "true",
           },
           {
             orderId: payment.id,
@@ -148,16 +182,17 @@ export async function POST(request: NextRequest) {
           }
         );
         result.formHtml = ecpayResult.formHtml;
+        transactionNo = ecpayResult.merchantTradeNo;
         break;
       }
       case "NEWEBPAY": {
         const { createTransaction } = await import("@/lib/payment/newebpay");
         const newebpayResult = await createTransaction(
           {
-            merchantId: process.env.NEWEBPAY_MERCHANT_ID!,
-            hashKey: process.env.NEWEBPAY_HASH_KEY!,
-            hashIV: process.env.NEWEBPAY_HASH_IV!,
-            isProduction: process.env.NODE_ENV === "production",
+            merchantId: providerConfig.merchantId as string,
+            hashKey: providerConfig.hashKey as string,
+            hashIV: providerConfig.hashIV as string,
+            isProduction: providerConfig.isProduction === true || providerConfig.isProduction === "true",
           },
           {
             orderId: payment.id,
@@ -169,14 +204,15 @@ export async function POST(request: NextRequest) {
           }
         );
         result.formHtml = newebpayResult.formHtml;
+        transactionNo = newebpayResult.merchantOrderNo;
         break;
       }
       case "STRIPE": {
         const { createPaymentIntent } = await import("@/lib/payment/stripe");
         const stripeResult = await createPaymentIntent(
           {
-            secretKey: process.env.STRIPE_SECRET_KEY!,
-            webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
+            secretKey: (providerConfig.secretKey || providerConfig.STRIPE_SECRET_KEY) as string,
+            webhookSecret: (providerConfig.webhookSecret || providerConfig.STRIPE_WEBHOOK_SECRET) as string,
           },
           {
             orderId: payment.id,
@@ -186,8 +222,20 @@ export async function POST(request: NextRequest) {
           }
         );
         result.clientSecret = stripeResult.clientSecret;
+        providerOrderNo = stripeResult.paymentIntentId;
         break;
       }
+    }
+
+    // 更新付款記錄的交易編號
+    if (transactionNo || providerOrderNo) {
+      await db.payment.update({
+        where: { id: payment.id },
+        data: {
+          transactionNo: transactionNo || undefined,
+          providerOrderNo: providerOrderNo || undefined,
+        },
+      });
     }
 
     return NextResponse.json({

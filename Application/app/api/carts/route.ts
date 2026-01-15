@@ -187,7 +187,6 @@ export async function POST(request: NextRequest) {
                 where: {
                     id: variantId,
                     productId,
-                    tenantId: session.user.tenantId,
                 },
             });
 
@@ -237,7 +236,6 @@ export async function POST(request: NextRequest) {
         // 檢查是否已有相同商品/變體
         const existingItem = await db.cartItem.findFirst({
             where: {
-                tenantId: session.user.tenantId,
                 cartId: cart.id,
                 productId,
                 variantId: variantId ?? null,
@@ -246,14 +244,10 @@ export async function POST(request: NextRequest) {
 
         let cartItem;
         if (existingItem) {
-            // 更新數量 (tenantId 包含在 where 條件中)
-            await db.cartItem.updateMany({
-                where: { id: existingItem.id, tenantId: session.user.tenantId },
+            // 更新數量
+            cartItem = await db.cartItem.update({
+                where: { id: existingItem.id },
                 data: { quantity: existingItem.quantity + quantity },
-            });
-            // 重新取得更新後的資料
-            cartItem = await db.cartItem.findFirst({
-                where: { id: existingItem.id, tenantId: session.user.tenantId },
                 include: {
                     product: { select: { id: true, name: true, price: true, coverImageUrl: true } },
                     variant: { select: { id: true, name: true, price: true } },

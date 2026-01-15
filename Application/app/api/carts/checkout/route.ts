@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
 
             // 清空購物車
             await tx.cartItem.deleteMany({
-                where: { cartId: cart.id, tenantId: session.user.tenantId },
+                where: { cartId: cart.id },
             });
 
             return newOrder;

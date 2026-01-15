@@ -2,7 +2,27 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { generateBlogOpenGraph } from "@/components/seo/opengraph-meta";
+import { renderMdx, isHtmlContent } from "@/lib/mdx";
 
+/**
+ * 文章內容渲染元件
+ * 支援 MDX 與 HTML 兩種格式
+ */
+async function BlogContent({ content }: { content: string }) {
+  // 如果內容是 HTML，直接渲染
+  if (isHtmlContent(content)) {
+    return (
+      <div
+        className="prose prose-lg max-w-none"
+        dangerouslySetInnerHTML={{ __html: content }}
+      />
+    );
+  }
+
+  // 使用 MDX 渲染
+  const mdxContent = await renderMdx(content);
+  return <div className="prose prose-lg max-w-none">{mdxContent}</div>;
+}
 /**
  * 取得文章資料
  */
@@ -84,7 +104,7 @@ export default async function BlogPostPage({
       {/* 文章標題 */}
       <header className="mb-8">
         <h1 className="text-4xl font-bold mb-4">{post.title}</h1>
-        
+
         <div className="flex items-center gap-4 text-muted-foreground">
           {post.author?.name && (
             <span>作者：{post.author.name}</span>
@@ -125,10 +145,7 @@ export default async function BlogPostPage({
       )}
 
       {/* 文章內容 */}
-      <div className="prose prose-lg max-w-none">
-        {/* 實際應用中應使用 MDX 渲染器 */}
-        <div dangerouslySetInnerHTML={{ __html: post.contentMdx }} />
-      </div>
+      <BlogContent content={post.contentMdx} />
 
       {/* 分享按鈕 */}
       <footer className="mt-12 pt-8 border-t">
