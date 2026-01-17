@@ -1,6 +1,6 @@
 /**
  * AI 服務整合模組
- * 整合 OpenAI API 用於商品描述生成、FAQ、部落格摘要、智能導購等功能
+ * 支援 DeepSeek 和 OpenAI API 用於商品描述生成、FAQ、部落格摘要、智能導購等功能
  */
 
 /**
@@ -8,6 +8,7 @@
  */
 interface AIConfig {
   apiKey: string;
+  baseUrl?: string;
   model?: string;
   maxTokens?: number;
   temperature?: number;
@@ -46,15 +47,16 @@ interface ChatMessage {
  */
 export class AIService {
   private config: AIConfig;
-  private baseUrl = "https://api.openai.com/v1";
+  private baseUrl: string;
 
   constructor(config: AIConfig) {
     this.config = {
-      model: "gpt-4o-mini",
+      model: config.model || "deepseek-chat",
       maxTokens: 2000,
       temperature: 0.7,
       ...config,
     };
+    this.baseUrl = config.baseUrl || "https://api.deepseek.com";
   }
 
   /**
@@ -189,7 +191,7 @@ export class AIService {
    * 執行聊天完成請求
    */
   public async chat(messages: ChatMessage[]): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -205,7 +207,7 @@ export class AIService {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(`OpenAI API Error: ${error.error?.message || "Unknown error"}`);
+      throw new Error(`AI API Error: ${error.error?.message || "Unknown error"}`);
     }
 
     const data = await response.json();
@@ -266,13 +268,30 @@ export class AIService {
 
 /**
  * 建立 AI 服務實例
+ * 優先使用 DeepSeek，若無則使用 OpenAI
  */
 export function createAIService(): AIService {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+  // 優先使用 DeepSeek
+  const deepseekKey = process.env.DEEPSEEK_API_KEY;
+  if (deepseekKey) {
+    return new AIService({
+      apiKey: deepseekKey,
+      baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+      model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+    });
   }
-  return new AIService({ apiKey });
+
+  // 備用 OpenAI
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey) {
+    return new AIService({
+      apiKey: openaiKey,
+      baseUrl: "https://api.openai.com",
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    });
+  }
+
+  throw new Error("No AI API key configured. Set DEEPSEEK_API_KEY or OPENAI_API_KEY.");
 }
 
 /**

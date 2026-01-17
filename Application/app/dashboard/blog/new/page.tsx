@@ -42,15 +42,19 @@ export default function NewBlogPostPage() {
       alert("請先輸入文章內容");
       return;
     }
+    if (!formData.title) {
+      alert("請先輸入文章標題");
+      return;
+    }
 
     setIsGenerating(true);
     try {
-      const response = await fetch("/api/ai/generate-description", {
+      const response = await fetch("/api/ai/blog-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productName: formData.title,
-          keywords: [],
+          title: formData.title,
+          content: formData.contentMdx,
         }),
       });
 
@@ -58,11 +62,14 @@ export default function NewBlogPostPage() {
       if (data.success) {
         setFormData((prev) => ({
           ...prev,
-          summary: data.data.descriptionMd.substring(0, 200),
+          summary: data.data.summary,
         }));
+      } else {
+        alert(data.error?.message || "AI 生成失敗");
       }
     } catch (error) {
       console.error("AI 生成失敗:", error);
+      alert("AI 生成失敗，請稍後再試");
     } finally {
       setIsGenerating(false);
     }

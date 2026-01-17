@@ -47,7 +47,7 @@ export default function BlogEditPage({
         // 先用 slug 查詢文章列表取得 id
         const listRes = await fetch(`/api/blog/posts?search=${resolvedParams.slug}`);
         const listData = await listRes.json();
-        
+
         if (listData.success && listData.data.items?.length > 0) {
           const postId = listData.data.items[0].id;
           // 用 id 取得完整文章資料
@@ -74,26 +74,36 @@ export default function BlogEditPage({
    * AI 生成文章摘要
    */
   const handleGenerateSummary = async () => {
-    if (!post?.contentMdx) return;
+    if (!post?.contentMdx) {
+      alert("請先輸入文章內容");
+      return;
+    }
+    if (!post?.title) {
+      alert("請先輸入文章標題");
+      return;
+    }
 
     setIsGeneratingSummary(true);
     try {
-      const res = await fetch("/api/ai", {
+      const res = await fetch("/api/ai/blog-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type: "blog_summary",
-          input: { content: post.contentMdx },
+          title: post.title,
+          content: post.contentMdx,
         }),
       });
       const data = await res.json();
-      if (data.success && data.data) {
+      if (data.success && data.data?.summary) {
         setPost((prev) =>
-          prev ? { ...prev, summary: data.data } : null
+          prev ? { ...prev, summary: data.data.summary } : null
         );
+      } else {
+        alert(data.error?.message || "AI 生成失敗");
       }
     } catch {
       console.error("AI 生成失敗");
+      alert("AI 生成失敗，請稍後再試");
     } finally {
       setIsGeneratingSummary(false);
     }

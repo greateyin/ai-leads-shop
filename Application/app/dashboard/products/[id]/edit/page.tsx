@@ -66,26 +66,32 @@ export default function ProductEditPage({
    * AI 生成商品描述
    */
   const handleGenerateDescription = async () => {
-    if (!product?.name) return;
+    if (!product?.name) {
+      alert("請先輸入商品名稱");
+      return;
+    }
 
     setIsGeneratingDescription(true);
     try {
-      const res = await fetch("/api/ai", {
+      const res = await fetch("/api/ai/generate-description", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type: "product_description",
-          input: { productName: product.name },
+          productName: product.name,
+          keywords: [],
         }),
       });
       const data = await res.json();
-      if (data.success && data.data?.description) {
+      if (data.success && data.data?.descriptionMd) {
         setProduct((prev) =>
-          prev ? { ...prev, descriptionMd: data.data.description } : null
+          prev ? { ...prev, descriptionMd: data.data.descriptionMd } : null
         );
+      } else {
+        alert(data.error?.message || "AI 生成失敗");
       }
     } catch {
       console.error("AI 生成失敗");
+      alert("AI 生成失敗，請稍後再試");
     } finally {
       setIsGeneratingDescription(false);
     }

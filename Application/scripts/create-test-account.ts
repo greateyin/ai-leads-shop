@@ -1,3 +1,6 @@
+import { config } from "dotenv";
+config({ path: ".env.local" });
+
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
@@ -35,7 +38,7 @@ async function createTestAccount() {
             data: {
                 id: tenantId,
                 name: "測試商店",
-                subdomain: `test-${Date.now()}`, // 確保唯一
+                subdomain: `test-${Date.now()}`,
             },
         });
         console.log("✅ Tenant created:", tenant.id);

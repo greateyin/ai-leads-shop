@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,11 +61,10 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium transition-colors ${
-        active
-          ? "border-b-2 border-primary text-primary"
-          : "text-muted-foreground hover:text-foreground"
-      }`}
+      className={`px-4 py-2 text-sm font-medium transition-colors ${active
+        ? "border-b-2 border-primary text-primary"
+        : "text-muted-foreground hover:text-foreground"
+        }`}
     >
       {children}
     </button>
@@ -139,66 +140,123 @@ function ProductDescriptionGenerator() {
 }
 
 /**
- * 智能導購聊天
+ * 智能導購聊天 - Claude 風格 UI
  */
 function CustomerChatBot() {
-  const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/ai/chat",
+    }),
+  });
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
+  // 自動滾動到最新訊息
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-    const newMessages = [...messages, { role: "user", content: input }];
-    setMessages(newMessages);
-    setInput("");
-    setIsLoading(true);
-
-    try {
-      // TODO: 整合實際 AI 聊天 API
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      setMessages([
-        ...newMessages,
-        {
-          role: "assistant",
-          content: "您好！我是 AI 導購助手。請問有什麼可以幫助您的嗎？",
-        },
-      ]);
-    } catch (error) {
-      console.error("發送失敗:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const isLoading = status === "submitted" || status === "streaming";
 
   return (
-    <div className="space-y-4">
-      <div className="h-[300px] overflow-y-auto rounded-lg border bg-muted/50 p-4">
+    <div className="flex flex-col h-[600px] bg-background rounded-xl border shadow-sm">
+      {/* 訊息區域 */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {messages.length === 0 ? (
-          <p className="text-center text-muted-foreground">開始與 AI 導購對話...</p>
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center mb-4">
+              <span className="text-2xl">🤖</span>
+            </div>
+            <h3 className="text-lg font-semibold mb-2">智能導購助手</h3>
+            <p className="text-muted-foreground max-w-sm">
+              您好！我是您的 AI 購物助手，可以幫您推薦商品、解答問題，請問有什麼可以幫您的嗎？
+            </p>
+          </div>
         ) : (
-          messages.map((msg, i) => (
+          messages.map((message) => (
             <div
-              key={i}
-              className={`mb-2 rounded-lg p-2 ${
-                msg.role === "user" ? "bg-primary text-primary-foreground ml-auto" : "bg-muted"
-              } max-w-[80%] ${msg.role === "user" ? "ml-auto" : ""}`}
+              key={message.id}
+              className={`flex gap-3 ${message.role === "user" ? "flex-row-reverse" : ""}`}
             >
-              {msg.content}
+              {/* 頭像 */}
+              <div
+                className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm ${message.role === "user"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-gradient-to-br from-orange-400 to-amber-500 text-white"
+                  }`}
+              >
+                {message.role === "user" ? "👤" : "🤖"}
+              </div>
+
+              {/* 訊息氣泡 */}
+              <div
+                className={`max-w-[75%] rounded-2xl px-4 py-3 ${message.role === "user"
+                  ? "bg-primary text-primary-foreground rounded-br-md"
+                  : "bg-muted rounded-bl-md"
+                  }`}
+              >
+                {message.parts.map((part, index) =>
+                  part.type === "text" ? (
+                    <p key={index} className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {part.text}
+                    </p>
+                  ) : null
+                )}
+              </div>
             </div>
           ))
         )}
+
+        {/* 載入中指示器 */}
+        {isLoading && messages[messages.length - 1]?.role === "user" && (
+          <div className="flex gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-sm text-white">
+              🤖
+            </div>
+            <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
       </div>
-      <div className="flex gap-2">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="輸入訊息..."
-          onKeyPress={(e) => e.key === "Enter" && handleSend()}
-        />
-        <Button onClick={handleSend} disabled={isLoading}>
-          發送
-        </Button>
+
+      {/* 輸入區域 */}
+      <div className="border-t p-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (input.trim() && status === "ready") {
+              sendMessage({ text: input });
+              setInput("");
+            }
+          }}
+          className="flex gap-3"
+        >
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={isLoading}
+            placeholder="輸入訊息..."
+            className="flex-1 rounded-full px-4"
+          />
+          <Button
+            type="submit"
+            disabled={isLoading || !input.trim()}
+            className="rounded-full px-6"
+          >
+            {isLoading ? (
+              <span className="animate-pulse">⋯</span>
+            ) : (
+              "發送"
+            )}
+          </Button>
+        </form>
       </div>
     </div>
   );
