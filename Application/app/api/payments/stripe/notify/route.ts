@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
                         // 扣減庫存
                         const { deductStock } = await import("@/lib/stock");
                         const orderItems = await db.orderItem.findMany({
-                            where: { orderId },
+                            where: { orderId, tenantId: payment.tenantId },
                             select: { productId: true, variantId: true, quantity: true },
                         });
                         await deductStock(orderItems);

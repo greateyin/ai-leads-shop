@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 /**
  * GET /api/products/public
  * 公開商品列表 - 不需要認證
+ * 
+ * 必須提供 shopSlug 參數以限定範圍到特定商店（tenant 隔離）
  */
 export async function GET(request: NextRequest) {
     try {
@@ -14,9 +16,40 @@ export async function GET(request: NextRequest) {
         const search = searchParams.get("search");
         const sortBy = searchParams.get("sortBy") || "createdAt";
         const sortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
+        const shopSlug = searchParams.get("shopSlug");
 
-        // 建立查詢條件
+        // Tenant 隔離：必須提供 shopSlug 或 tenantId 參數
+        // 這確保公開 API 不會返回所有租戶的商品
+        if (!shopSlug) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: { code: "INVALID_INPUT", message: "必須提供 shopSlug 參數" },
+                },
+                { status: 400 }
+            );
+        }
+
+        // 根據 shopSlug 取得 shop 和 tenantId
+        const shop = await db.shop.findUnique({
+            where: { slug: shopSlug },
+            select: { id: true, tenantId: true },
+        });
+
+        if (!shop) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: { code: "NOT_FOUND", message: "找不到商店" },
+                },
+                { status: 404 }
+            );
+        }
+
+        // 建立查詢條件 - 加入 tenantId 過濾確保 tenant 隔離
         const where = {
+            tenantId: shop.tenantId,  // Tenant 隔離
+            shopId: shop.id,           // 限定到特定商店
             status: "PUBLISHED" as const,
             deletedAt: null,
             ...(category && {
@@ -80,12 +113,14 @@ export async function GET(request: NextRequest) {
                 },
             }),
             db.product.count({ where }),
-            // 取得所有分類（供篩選用）
+            // 取得所有分類（供篩選用）- 加入 tenantId 過濾確保 tenant 隔離
             db.productCategory.findMany({
                 where: {
+                    tenantId: shop.tenantId,  // Tenant 隔離
                     products: {
                         some: {
                             product: {
+                                shopId: shop.id,  // 限定到特定商店
                                 status: "PUBLISHED",
                                 deletedAt: null,
                             },
