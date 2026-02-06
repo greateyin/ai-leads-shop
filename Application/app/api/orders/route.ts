@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { generateOrderNo } from "@/lib/utils";
 import { generateId } from "@/lib/id";
 import { sendGuestOrderConfirmationEmail } from "@/lib/email";
+import { withStaffAuth, type AuthenticatedSession } from "@/lib/api/with-auth";
 
 /**
  * 訂單建立 Schema
@@ -41,18 +42,10 @@ const createOrderSchema = z.object({
 
 /**
  * GET /api/orders
- * 取得訂單列表
+ * 取得訂單列表（需要 OWNER / ADMIN / STAFF 角色）
  */
-export async function GET(request: NextRequest) {
+export const GET = withStaffAuth(async (request: NextRequest, session: AuthenticatedSession) => {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId) {
-      return NextResponse.json(
-        { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
-        { status: 401 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
@@ -98,11 +91,12 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 /**
  * POST /api/orders
  * 建立新訂單 - 支援登入用戶和訪客結帳 (Guest Checkout)
+ * 注意：此端點不使用 withAuth，因訪客結帳不需登入
  */
 export async function POST(request: NextRequest) {
   try {

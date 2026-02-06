@@ -109,9 +109,9 @@ function GeneralSettings({ tenant }: { tenant: Record<string, unknown> | null })
 function BillingSettings({ tenant }: { tenant: Record<string, unknown> | null }) {
   const currentPlan = (tenant?.plan as string) || "SEED";
   const plans = [
-    { id: "SEED", name: "種子方案", price: "免費", features: ["50 個商品", "100 筆訂單/月"] },
-    { id: "GROWTH", name: "成長方案", price: "NT$ 499/月", features: ["500 個商品", "1,000 筆訂單/月"] },
-    { id: "PRO", name: "專業方案", price: "NT$ 1,499/月", features: ["無限商品", "無限訂單"] },
+    { id: "SEED", name: "種子方案", price: "免費", features: ["50 個商品", "100 筆訂單/月", "交易抽成 5%"] },
+    { id: "GROWTH", name: "成長方案", price: "NT$ 500/月", features: ["500 個商品", "1,000 筆訂單/月", "交易抽成 1%"] },
+    { id: "PRO", name: "專業方案", price: "NT$ 1,500/月", features: ["無限商品", "無限訂單", "交易抽成 0%"] },
   ];
 
   return (

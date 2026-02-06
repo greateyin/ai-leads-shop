@@ -126,7 +126,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
 
       // 每次請求都從 DB 讀取最新的 activeTenantId
-      // 這確保租戶切換後立即生效，不需前端呼叫 update()
+      // 這確保租戶切換後立即生效，且被移除成員無法繼續存取
       if (token.id) {
         try {
           const userTenant = await db.userTenant.findFirst({
@@ -136,16 +136,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             token.activeTenantId = userTenant.tenantId;
             token.activeTenantRole = userTenant.role;
           } else {
-            // 沒有 userTenant 時，使用 user.tenantId
-            token.activeTenantId = token.tenantId as string;
-            token.activeTenantRole = token.role as string;
+            // [安全] 無有效 userTenant 關聯 → 清空租戶存取權
+            // 不可 fallback 到 user.tenantId，否則被移除的成員仍能存取
+            token.activeTenantId = "";
+            token.activeTenantRole = "CUSTOMER";
           }
         } catch {
-          // DB 錯誤時保持原值或使用預設值
-          if (!token.activeTenantId) {
-            token.activeTenantId = token.tenantId as string;
-            token.activeTenantRole = token.role as string;
-          }
+          // [安全] DB 錯誤時拒絕租戶存取，避免授權漂移
+          token.activeTenantId = "";
+          token.activeTenantRole = "CUSTOMER";
         }
       }
 

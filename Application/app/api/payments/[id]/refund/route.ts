@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { generateId } from "@/lib/id";
+import { withAdminAuth, type AuthenticatedSession } from "@/lib/api/with-auth";
 
 /**
  * 退款請求驗證 Schema
@@ -14,25 +14,15 @@ const refundSchema = z.object({
 
 /**
  * POST /api/payments/[id]/refund
- * 處理退款請求
+ * 處理退款請求（需要 OWNER / ADMIN 角色）
  */
-export async function POST(
+export const POST = withAdminAuth(async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  session: AuthenticatedSession,
+  context?: { params: Promise<{ id: string }> }
+) => {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: "UNAUTHORIZED", message: "請先登入" },
-        },
-        { status: 401 }
-      );
-    }
-
-    const { id: paymentId } = await params;
+    const { id: paymentId } = await context!.params;
     const body = await request.json();
     const validation = refundSchema.safeParse(body);
 
@@ -179,4 +169,4 @@ export async function POST(
       { status: 500 }
     );
   }
-}
+});

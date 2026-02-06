@@ -76,19 +76,31 @@ export async function verifyUcpRequest(
         };
     }
 
-    // 驗證 API Key（如果提供）
-    if (apiKey && ucpConfig.apiKeyHash) {
-        const hashedKey = crypto
-            .createHash("sha256")
-            .update(apiKey)
-            .digest("hex");
+    // [安全] 強制驗證 API Key — 商家必須設定 apiKeyHash 才能使用 UCP
+    if (!ucpConfig.apiKeyHash) {
+        return {
+            success: false,
+            error: "UCP API key not configured for this merchant",
+        };
+    }
 
-        if (hashedKey !== ucpConfig.apiKeyHash) {
-            return {
-                success: false,
-                error: "Invalid API key",
-            };
-        }
+    if (!apiKey) {
+        return {
+            success: false,
+            error: "Missing X-UCP-Api-Key header",
+        };
+    }
+
+    const hashedKey = crypto
+        .createHash("sha256")
+        .update(apiKey)
+        .digest("hex");
+
+    if (hashedKey !== ucpConfig.apiKeyHash) {
+        return {
+            success: false,
+            error: "Invalid API key",
+        };
     }
 
     // 驗證平台是否允許

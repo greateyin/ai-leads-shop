@@ -22,58 +22,61 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Missing signature" }, { status: 400 });
         }
 
-        // 嘗試解析 payload 取得 metadata 中的 tenantId 或 orderId
-        let tenantId: string | undefined;
-        let orderId: string | undefined;
+        // [安全] 驗簽策略：先用 Platform secret 驗，失敗再嘗試 tenant-specific secret
+        // 絕不可用未驗證 payload 中的 tenantId 來選擇 secret（防止跨租戶攻擊）
+        let verifiedEvent: ReturnType<typeof verifyWebhook>["event"] = undefined;
+        let verifiedTenantId: string | null = null; // 用於後續一致性檢查
 
-        try {
-            const rawEvent = JSON.parse(payload);
-            const metadata = rawEvent?.data?.object?.metadata || {};
-            tenantId = metadata.tenantId;
-            orderId = metadata.orderId;
-        } catch {
-            // 無法預解析，繼續使用 Platform 模式
-        }
+        // 策略一：Platform 模式（環境變數）
+        const envSecretKey = process.env.STRIPE_SECRET_KEY;
+        const envWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-        // 嘗試從 tenant 專屬設定取得 Stripe credentials
-        let stripeConfig: { secretKey: string; webhookSecret: string } | null = null;
-
-        if (tenantId) {
-            stripeConfig = await getStripeConfigForTenant(tenantId);
-        } else if (orderId) {
-            // 從 orderId 找 tenantId
-            const order = await db.order.findUnique({
-                where: { id: orderId },
-                select: { tenantId: true },
-            });
-            if (order) {
-                stripeConfig = await getStripeConfigForTenant(order.tenantId);
+        if (envSecretKey && envWebhookSecret) {
+            const platformConfig = { secretKey: envSecretKey, webhookSecret: envWebhookSecret };
+            const result = verifyWebhook(platformConfig, payload, signature);
+            if (result.valid && result.event) {
+                verifiedEvent = result.event;
+                verifiedTenantId = null; // Platform 模式，tenantId 由 event metadata 決定
             }
         }
 
-        // 若無 tenant 專屬設定，fallback 到環境變數（Platform 模式）
-        if (!stripeConfig) {
-            const envSecretKey = process.env.STRIPE_SECRET_KEY;
-            const envWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+        // 策略二：Connect 模式（每個 tenant 有自己的 Stripe 帳號）
+        // 只有在 Platform 驗簽失敗時才嘗試，且需依 Stripe account header 查找
+        if (!verifiedEvent) {
+            const stripeAccountId = request.headers.get("stripe-account");
+            if (stripeAccountId) {
+                // 用 Stripe Connect Account ID 查找 tenant（非使用 payload 中的 metadata）
+                const provider = await db.paymentProvider.findFirst({
+                    where: {
+                        type: "STRIPE",
+                        config: { path: ["stripeAccountId"], equals: stripeAccountId },
+                    },
+                    select: { tenantId: true, config: true },
+                });
 
-            if (!envSecretKey || !envWebhookSecret) {
-                console.error("[Stripe] No tenant config and no env vars configured");
-                return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
+                if (provider) {
+                    const config = provider.config as Record<string, string>;
+                    const tenantConfig = {
+                        secretKey: config.secretKey || config.STRIPE_SECRET_KEY || "",
+                        webhookSecret: config.webhookSecret || config.STRIPE_WEBHOOK_SECRET || "",
+                    };
+                    if (tenantConfig.secretKey && tenantConfig.webhookSecret) {
+                        const result = verifyWebhook(tenantConfig, payload, signature);
+                        if (result.valid && result.event) {
+                            verifiedEvent = result.event;
+                            verifiedTenantId = provider.tenantId;
+                        }
+                    }
+                }
             }
-
-            stripeConfig = {
-                secretKey: envSecretKey,
-                webhookSecret: envWebhookSecret,
-            };
         }
 
-        // 驗證 webhook
-        const { valid, event } = verifyWebhook(stripeConfig, payload, signature);
-
-        if (!valid || !event) {
-            console.error("[Stripe] Webhook verification failed");
+        if (!verifiedEvent) {
+            console.error("[Stripe] Webhook verification failed with all available secrets");
             return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
         }
+
+        const event = verifiedEvent;
 
         console.log(`[Stripe] Received event: ${event.type}`);
 
@@ -87,16 +90,26 @@ export async function POST(request: NextRequest) {
                     : session.payment_intent?.id;
 
                 if (orderId) {
-                    // 查找付款記錄
+                    // [安全] 查找付款記錄，加上 tenantId 一致性檢查
+                    const paymentWhere = verifiedTenantId
+                        ? { orderId, tenantId: verifiedTenantId }
+                        : { orderId };
+
                     const payment = await db.payment.findFirst({
-                        where: { orderId },
+                        where: paymentWhere,
                         select: { id: true, tenantId: true, orderId: true },
                     });
 
                     if (payment) {
-                        // 更新付款狀態
-                        await db.payment.update({
-                            where: { id: payment.id },
+                        // [安全] Connect 模式下，驗證 payment 的 tenantId 與驗簽用的 tenantId 一致
+                        if (verifiedTenantId && payment.tenantId !== verifiedTenantId) {
+                            console.error(`[Stripe] 跨租戶異常：驗簽 tenant=${verifiedTenantId}, payment tenant=${payment.tenantId}`);
+                            return NextResponse.json({ error: "Tenant mismatch" }, { status: 403 });
+                        }
+
+                        // 更新付款狀態（使用 tenantId 限制）
+                        await db.payment.updateMany({
+                            where: { id: payment.id, tenantId: payment.tenantId },
                             data: {
                                 status: "PAID",
                                 transactionNo: paymentIntentId,
@@ -104,9 +117,9 @@ export async function POST(request: NextRequest) {
                             },
                         });
 
-                        // 更新訂單狀態
-                        await db.order.update({
-                            where: { id: orderId },
+                        // 更新訂單狀態（使用 tenantId 限制）
+                        await db.order.updateMany({
+                            where: { id: orderId, tenantId: payment.tenantId },
                             data: {
                                 paymentStatus: "PAID",
                                 status: "PAID",
@@ -124,7 +137,7 @@ export async function POST(request: NextRequest) {
                         // 發送付款成功通知
                         try {
                             const order = await db.order.findFirst({
-                                where: { id: orderId },
+                                where: { id: orderId, tenantId: payment.tenantId },
                                 select: { orderNo: true, totalAmount: true, user: { select: { email: true } } },
                             });
                             if (order?.user?.email) {
@@ -171,13 +184,23 @@ export async function POST(request: NextRequest) {
                 const orderId = paymentIntent.metadata?.orderId;
 
                 if (orderId) {
-                    // 先取得 payment 並驗證 tenantId
+                    // [安全] 查找 payment 時加上 tenantId 一致性檢查
+                    const failPaymentWhere = verifiedTenantId
+                        ? { orderId, tenantId: verifiedTenantId }
+                        : { orderId };
+
                     const payment = await db.payment.findFirst({
-                        where: { orderId },
+                        where: failPaymentWhere,
                         select: { id: true, tenantId: true },
                     });
 
                     if (payment) {
+                        // [安全] Connect 模式下驗證租戶一致性
+                        if (verifiedTenantId && payment.tenantId !== verifiedTenantId) {
+                            console.error(`[Stripe] 跨租戶異常（FAILED）：驗簽 tenant=${verifiedTenantId}, payment tenant=${payment.tenantId}`);
+                            break;
+                        }
+
                         // 使用 tenantId 限制更新範圍，防止跨租戶誤更新
                         await db.payment.updateMany({
                             where: {

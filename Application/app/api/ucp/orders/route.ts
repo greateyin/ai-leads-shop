@@ -60,9 +60,17 @@ export async function POST(request: NextRequest) {
 
         const { checkoutSessionId, merchantId, paymentToken, paymentHandlerId } = validation.data;
 
-        // 驗證商家
+        // [安全] 強制驗證 UCP 請求（API Key + 商家啟用狀態）
+        const authResult = await verifyUcpRequest(request);
+        if (!authResult.success) {
+            return NextResponse.json(
+                formatUcpError("UNAUTHORIZED", authResult.error || "Authentication failed"),
+                { status: 401 }
+            );
+        }
+
         const shop = await db.shop.findFirst({
-            where: { id: merchantId },
+            where: { id: authResult.context!.shopId },
             select: { id: true, tenantId: true, currency: true, config: true },
         });
 
@@ -73,19 +81,12 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const ucpConfig = (shop.config as Record<string, unknown>)?.ucp as Record<string, unknown>;
-        if (!ucpConfig?.enabled) {
-            return NextResponse.json(
-                formatUcpError("FORBIDDEN", "UCP not enabled"),
-                { status: 403 }
-            );
-        }
-
-        // 取得 Checkout Session
+        // 取得 Checkout Session（加上 tenantId 一致性）
         const dbSession = await db.ucpCheckoutSession.findFirst({
             where: {
                 id: checkoutSessionId,
                 shopId: merchantId,
+                tenantId: shop.tenantId,
             },
         });
 
@@ -310,11 +311,21 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // 查詢訂單
+        // [安全] 驗證 UCP 請求（API Key + 商家啟用狀態）
+        const authResult = await verifyUcpRequest(request);
+        if (!authResult.success) {
+            return NextResponse.json(
+                formatUcpError("UNAUTHORIZED", authResult.error || "Authentication failed"),
+                { status: 401 }
+            );
+        }
+
+        // [安全] 查詢訂單加上 tenantId 一致性
         const order = await db.order.findFirst({
             where: {
                 id: orderId,
                 shopId: merchantId,
+                tenantId: authResult.context!.tenantId,
             },
             include: {
                 items: {

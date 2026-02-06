@@ -268,10 +268,10 @@ export async function generateMonthlyInvoice(
             baseAmount = 0; // 免費方案
             break;
         case "GROWTH":
-            baseAmount = 990; // 月費
+            baseAmount = 500; // 月費 (PRD: Growth 方案 NTD 500)
             break;
         case "PRO":
-            baseAmount = 2990; // 月費
+            baseAmount = 1500; // 月費 (PRD: Pro 方案 NTD 1,500)
             break;
     }
 

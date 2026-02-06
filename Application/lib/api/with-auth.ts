@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { db, createTenantPrisma } from "@/lib/db";
+import type { PrismaClient } from "@prisma/client";
 
 /**
  * Session 類型擴展
@@ -12,6 +14,8 @@ export interface AuthenticatedSession {
         role: string;
         tenantId: string;
     };
+    /** 自動注入 tenantId 的 Prisma client，所有查詢/更新/建立都會帶上 tenantId */
+    tenantDb: ReturnType<typeof createTenantPrisma>;
 }
 
 /**
@@ -103,6 +107,30 @@ export function withAuth<T = unknown>(
                 );
             }
 
+            // 2.5 [安全] 驗證使用者確實仍屬於該租戶（防止被移除後繼續存取）
+            if (requireTenant && session.user.tenantId) {
+                const membership = await db.userTenant.findFirst({
+                    where: {
+                        userId: session.user.id,
+                        tenantId: session.user.tenantId as string,
+                    },
+                    select: { role: true },
+                });
+
+                if (!membership) {
+                    return NextResponse.json(
+                        {
+                            success: false,
+                            error: { code: "FORBIDDEN", message: "您已不屬於此租戶" },
+                        },
+                        { status: 403 }
+                    );
+                }
+
+                // 使用 DB 中的實際角色，而非 session 快取的角色
+                session.user.role = membership.role;
+            }
+
             // 3. 檢查角色權限 (若有指定)
             if (roles.length > 0) {
                 const userRole = (session.user.role as UserRole) || "CUSTOMER";
@@ -117,15 +145,17 @@ export function withAuth<T = unknown>(
                 }
             }
 
-            // 4. 呼叫實際的 handler
+            // 4. 建立 tenant-scoped DB client 並呼叫 handler
+            const tenantId = (session.user.tenantId as string) || "";
             const authenticatedSession: AuthenticatedSession = {
                 user: {
                     id: session.user.id,
                     email: session.user.email,
                     name: session.user.name,
                     role: (session.user.role as string) || "CUSTOMER",
-                    tenantId: (session.user.tenantId as string) || "",
+                    tenantId,
                 },
+                tenantDb: tenantId ? createTenantPrisma(tenantId) : db as unknown as ReturnType<typeof createTenantPrisma>,
             };
 
             return await handler(request, authenticatedSession, context);

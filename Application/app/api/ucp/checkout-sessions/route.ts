@@ -148,36 +148,13 @@ export async function POST(request: NextRequest) {
         const { merchantId, cart, shippingAddress, billingAddress, buyerEmail, metadata } =
             validation.data;
 
-        // 驗證請求
+        // [安全] 驗證請求 — 不允許繞過驗證的 fallback
         const authResult = await verifyUcpRequest(request);
         if (!authResult.success) {
-            // 對於公開呼叫，使用較寬鬆的驗證
-            const shop = await db.shop.findFirst({
-                where: { id: merchantId },
-                select: { id: true, tenantId: true, currency: true, config: true },
-            });
-
-            if (!shop) {
-                return NextResponse.json(
-                    formatUcpError("NOT_FOUND", "Merchant not found"),
-                    { status: 404 }
-                );
-            }
-
-            const ucpConfig = (shop.config as Record<string, unknown>)?.ucp as Record<string, unknown>;
-            if (!ucpConfig?.enabled) {
-                return NextResponse.json(
-                    formatUcpError("FORBIDDEN", "UCP not enabled"),
-                    { status: 403 }
-                );
-            }
-
-            authResult.context = {
-                tenantId: shop.tenantId,
-                shopId: shop.id,
-                platformId: "public",
-                merchantId,
-            };
+            return NextResponse.json(
+                formatUcpError("UNAUTHORIZED", authResult.error || "Authentication failed"),
+                { status: 401 }
+            );
         }
 
         const { tenantId, shopId } = authResult.context!;

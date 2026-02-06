@@ -130,13 +130,14 @@ export async function POST(request: NextRequest) {
       where: { id: providerId, tenantId: session.user.tenantId },
     });
 
+    // [安全] shippingMethod 查詢加上 tenantId，防止跨租戶引用
     const method = await db.shippingMethod.findFirst({
-      where: { id: methodId },
+      where: { id: methodId, tenantId: session.user.tenantId },
     });
 
     if (!provider || !method) {
       return NextResponse.json(
-        { success: false, error: { code: "NOT_FOUND", message: "找不到物流供應商" } },
+        { success: false, error: { code: "NOT_FOUND", message: "找不到物流供應商或配送方式" } },
         { status: 404 }
       );
     }
@@ -185,9 +186,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 更新訂單狀態
-    await db.order.update({
-      where: { id: orderId },
+    // [安全] 更新訂單狀態（加上 tenantId 限制）
+    await db.order.updateMany({
+      where: { id: orderId, tenantId: session.user.tenantId },
       data: { shippingStatus: "PREPARING" },
     });
 

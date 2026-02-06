@@ -118,6 +118,8 @@ middleware.ts            # 全域 Middleware (RLS 檢查、權限驗證)
 
 核心邏輯：利用 Auth.js v5 `auth()` 函式取得當前 session 於 server components；在 Route Handler 設定 callbacks 決定新註冊帳號預設角色；使用 Prisma/Drizzle ORM 在 `users` 表建立記錄。中介函式 `withAuth` 用來包裝 API，使未授權者無法存取保護路由。
 
+**`withAuth` 遷移指引**：所有需要認證的 API Route Handler 應逐步遷移至 `withAuth` / `withAdminAuth` / `withStaffAuth` 包裝模式，取代手動 `auth()` + 條件判斷。已完成遷移的路由包含：`products`（GET: withAuth, POST: withStaffAuth）、`orders`（GET: withStaffAuth）、`payments/[id]/refund`（POST: withAdminAuth）。例外：支援訪客操作的端點（如 `POST /api/orders` 訪客結帳）不使用 withAuth。
+
 ### 店家與租戶管理模組
 
 | 功能 | 路由/函式 | 描述 | 錯誤處理 |
@@ -148,8 +150,10 @@ middleware.ts            # 全域 Middleware (RLS 檢查、權限驗證)
 
 | 功能 | 路由/函式 | 行為 | 驗證 |
 |---|---|---|---|
-| 建立購物車/新增商品 | `POST /api/carts/add-item` | 以 session 或 `userId` 取得購物車；加入商品/變體並更新 `items`, `total`；若庫存不足返回錯誤 | 檢查 `products.stock` 或 `product_variants.stock`；若超過可購買數量則返回 409 |
-| 更新/刪除購物車項目 | `PATCH /api/carts/update-item` | 更新數量或刪除某項；重新計算總額 | 同上 |
+| 建立購物車/新增商品 | `POST /api/carts` | Body: `{productId, variantId?, quantity}`；以 session 取得購物車；加入商品/變體並更新 `items`, `total`；若庫存不足返回 400 | 檢查 `products.stock` 或 `product_variants.stock` |
+| 更新購物車項目 | `PATCH /api/carts/items/{id}` | 更新數量；重新計算總額 | 同上 |
+| 刪除購物車項目 | `DELETE /api/carts/items/{id}` | 刪除某項；重新計算總額 | 同上 |
+| 清空購物車 | `DELETE /api/carts` | 刪除當前使用者購物車所有項目並重設總額 | 需登入 |
 | 結帳生成訂單 | `POST /api/orders` | 輸入收貨地址、配送方式、付款方式；生成 `orders`, `order_items`, `addresses` 記錄 | 檢查庫存與計算運費；建立 `paymentIntent` 或第三方交易資料；返回 `{orderId, paymentData}` |
 | 查詢訂單 | `GET /api/orders` | Query: `status`, `dateFrom`, `dateTo`, `search` | 返回訂單列表及分頁 |
 | 更新訂單狀態 | `PATCH /api/orders/{id}` | 更新 `status`、`paymentStatus`、`shippingStatus` | 僅允許店家角色；驗證狀態流轉是否合法 (不可逆) |
@@ -204,8 +208,8 @@ export class PaymentService {
 
 | 路由 | 方法 | 描述 |
 |---|---|---|
-| `/api/payments/create` | POST | 接收 `orderId`、`provider`，呼叫 `PaymentService.createTransaction()`，返回金流頁面資訊 (HTML form 或 client secret)。 |
-| `/api/payments/webhook` | POST | 供各供應商通知；讀取 `provider` 參數並調用對應驗證邏輯；更新 `payments`、`orders`。 |
+| `/api/payments` | POST | 接收 `orderId`、`provider`，呼叫 `PaymentService.createTransaction()`，返回金流頁面資訊 (HTML form 或 client secret)。 |
+| `/api/payments/{provider}/notify` | POST | 供各供應商通知 (provider = `ecpay` / `newebpay` / `stripe` / `paypal`)；調用對應驗證邏輯；更新 `payments`、`orders`。回傳格式依供應商規範（ECPay 需回傳 `1|OK` 純文字，其餘回傳 JSON `{received: true}`）。 |
 | `/api/payments/{id}/refund` | POST | 部分或全額退款；需要判斷訂單狀態與可退金額。 |
 
 此模組需實作重試機制與冪等處理，確保 webhook 重複送達時不會重複結帳。
@@ -223,8 +227,8 @@ Route Handlers:
 
 | 路由 | 方法 | 功能 |
 |---|---|---|
-| `/api/logistics/create` | POST | 由訂單建立物流單；傳入 `orderId` 與 `shippingMethodId`；回傳 `shippingOrderId`, `trackingNumber`, `labelUrl` |
-| `/api/logistics/webhook` | POST | 接收物流系統回調，更新 `shipping_orders.status` |
+| `/api/logistics` | POST | 由訂單建立物流單；傳入 `orderId` 與 `shippingMethodId`；回傳 `shippingOrderId`, `trackingNumber`, `labelUrl` |
+| `/api/logistics/webhook` | POST | 接收物流系統回調，更新 `shipping_orders.status`。ECPay 物流需回傳 `1|OK` 純文字；通用格式回傳 JSON `{success: true}`。 |
 | `/api/logistics/stores` | GET | 取得可取件店列表；Query: `provider`, `lat`, `lng` |
 
 物流資料需儲存在 `shipping_orders`，並與 `orders` 連結。
@@ -363,7 +367,16 @@ API 返回格式統一採用 JSON：
 | `RATE_LIMITED` | 429 | 超出呼叫頻率限制 |
 | `INTERNAL_ERROR` | 500 | 伺服器內部錯誤 |
 
-對於 webhook 端點，應返回純文字 `OK` 或 `400` 以符合供應商要求。所有錯誤皆應記錄於中央日誌。
+對於 webhook/notify 端點，回傳格式依供應商規範而有例外：
+
+| 供應商 | 成功回傳 | 失敗回傳 | 說明 |
+|---|---|---|---|
+| **ECPay (金流/物流)** | `1|OK` (純文字, 200) | `0|ErrorMsg` (純文字, 400) | ECPay 強制要求純文字格式 |
+| **NewebPay** | `{"success": true}` (JSON, 200) | `{"success": false}` (JSON, 400) | 統一 JSON |
+| **Stripe** | `{"received": true}` (JSON, 200) | `{"error": "..."}` (JSON, 400) | Stripe 標準格式 |
+| **PayPal** | `{"received": true}` (JSON, 200) | `{"error": "..."}` (JSON, 400) | PayPal 標準格式 |
+
+其餘所有 API 端點一律使用上述統一 JSON 格式。所有錯誤皆應記錄於中央日誌。
 
 ## 背景作業與排程任務
 

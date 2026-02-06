@@ -112,25 +112,25 @@ export async function POST(request: NextRequest) {
                 return new NextResponse("1|OK"); // ECPay 需要回 1|OK
             }
 
-            // 驗證 CheckMacValue 簽章
+            // [安全] 強制驗證 CheckMacValue 簽章 — 缺少金鑰設定時拒絕處理
             const providerConfig = shippingOrder.provider?.config as { hashKey?: string; hashIV?: string } | null;
-            if (providerConfig?.hashKey && providerConfig?.hashIV) {
-                const { ECPayLogisticsService } = await import("@/lib/logistics/ecpay-logistics");
-                const ecpayService = new ECPayLogisticsService({
-                    merchantId: data.MerchantID,
-                    hashKey: providerConfig.hashKey,
-                    hashIV: providerConfig.hashIV,
-                });
-
-                // 驗證簽章
-                if (!ecpayService.verifyCheckMacValue(payload as Record<string, string>)) {
-                    console.error(`[Logistics Webhook] 簽章驗證失敗: ${data.AllPayLogisticsID}`);
-                    return new NextResponse("0|CheckMacValue Error", { status: 400 });
-                }
-                console.log(`[Logistics Webhook] 簽章驗證成功: ${data.AllPayLogisticsID}`);
-            } else {
-                console.warn(`[Logistics Webhook] 無法驗證簽章，缺少 hashKey/hashIV 設定`);
+            if (!providerConfig?.hashKey || !providerConfig?.hashIV) {
+                console.error(`[Logistics Webhook] 拒絕處理：缺少 hashKey/hashIV 設定，無法驗證簽章`);
+                return new NextResponse("0|Missing Config", { status: 400 });
             }
+
+            const { ECPayLogisticsService } = await import("@/lib/logistics/ecpay-logistics");
+            const ecpayService = new ECPayLogisticsService({
+                merchantId: data.MerchantID,
+                hashKey: providerConfig.hashKey,
+                hashIV: providerConfig.hashIV,
+            });
+
+            if (!ecpayService.verifyCheckMacValue(payload as Record<string, string>)) {
+                console.error(`[Logistics Webhook] 簽章驗證失敗: ${data.AllPayLogisticsID}`);
+                return new NextResponse("0|CheckMacValue Error", { status: 400 });
+            }
+            console.log(`[Logistics Webhook] 簽章驗證成功: ${data.AllPayLogisticsID}`);
 
             const newStatus = mapProviderStatus(data.RtnCode);
 
@@ -181,33 +181,52 @@ export async function POST(request: NextRequest) {
         if (genericResult.success) {
             const data = genericResult.data;
 
+            // [安全] 用 provider + trackingNumber 聯合查詢，縮小碰撞範圍
+            // 同時 include provider 以取得驗證設定
             const shippingOrder = await db.shippingOrder.findFirst({
-                where: { trackingNumber: data.trackingNumber },
+                where: {
+                    trackingNumber: data.trackingNumber,
+                    provider: { code: data.provider },
+                },
                 include: {
                     order: {
                         select: { id: true, userId: true },
+                    },
+                    provider: {
+                        select: { config: true, code: true },
                     },
                 },
             });
 
             if (!shippingOrder) {
-                console.warn(`[Logistics Webhook] 找不到物流訂單: ${data.trackingNumber}`);
+                console.warn(`[Logistics Webhook] 找不到物流訂單: ${data.trackingNumber} (provider: ${data.provider})`);
                 return NextResponse.json({ success: false, error: "ShippingOrder not found" }, { status: 404 });
             }
 
-            // 更新物流訂單狀態 (tenantId 確認在 findFirst 時已驗證)
+            // [安全] 驗證 HMAC 簽章（如果供應商有設定金鑰）
+            const genericProviderConfig = shippingOrder.provider?.config as { webhookSecret?: string } | null;
+            if (genericProviderConfig?.webhookSecret) {
+                const receivedSignature = request.headers.get("X-Webhook-Signature");
+                if (!receivedSignature) {
+                    console.error(`[Logistics Webhook] 缺少簽章 header: ${data.trackingNumber}`);
+                    return NextResponse.json({ success: false, error: "Missing signature" }, { status: 401 });
+                }
+                // TODO: 實作 HMAC 簽章驗證邏輯
+            }
+
+            // 更新物流訂單狀態（tenantId 限制）
             await db.shippingOrder.update({
                 where: { id: shippingOrder.id, tenantId: shippingOrder.tenantId },
                 data: { status: data.status as "CREATED" | "AWAITING_PICKUP" | "IN_TRANSIT" | "DELIVERED" | "CANCELLED" },
             });
 
-            // 更新訂單 shippingStatus
+            // 更新訂單 shippingStatus（tenantId 限制）
             const orderShippingStatus = data.status === "DELIVERED" ? "DELIVERED"
                 : data.status === "IN_TRANSIT" ? "DELIVERING"
                     : data.status === "CANCELLED" ? "RETURNED"
                         : "PREPARING";
 
-            await db.order.update({
+            await db.order.updateMany({
                 where: { id: shippingOrder.orderId, tenantId: shippingOrder.tenantId },
                 data: { shippingStatus: orderShippingStatus },
             });

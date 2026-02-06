@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/utils";
 import { generateId } from "@/lib/id";
+import { withAuth, withStaffAuth, type AuthenticatedSession } from "@/lib/api/with-auth";
 
 /**
  * 商品建立 Schema (含 variants 與 assets)
@@ -38,19 +38,8 @@ const createProductSchema = z.object({
  * GET /api/products
  * 取得商品列表
  */
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest, session: AuthenticatedSession) => {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: "UNAUTHORIZED", message: "請先登入" },
-        },
-        { status: 401 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
@@ -107,25 +96,14 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 /**
  * POST /api/products
- * 建立新商品
+ * 建立新商品（需要 OWNER / ADMIN / STAFF 角色）
  */
-export async function POST(request: NextRequest) {
+export const POST = withStaffAuth(async (request: NextRequest, session: AuthenticatedSession) => {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: "UNAUTHORIZED", message: "請先登入" },
-        },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
     const validation = createProductSchema.safeParse(body);
 
@@ -269,4 +247,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

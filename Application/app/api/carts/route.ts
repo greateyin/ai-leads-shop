@@ -298,3 +298,57 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+
+/**
+ * DELETE /api/carts
+ * 清空當前使用者的購物車
+ * 刪除所有購物車項目並重設購物車總額
+ */
+export async function DELETE(request: NextRequest) {
+    try {
+        const session = await auth();
+        if (!session?.user?.tenantId) {
+            return NextResponse.json(
+                { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
+                { status: 401 }
+            );
+        }
+
+        // 查詢當前使用者的購物車
+        const cart = await db.cart.findFirst({
+            where: {
+                tenantId: session.user.tenantId,
+                userId: session.user.id,
+            },
+        });
+
+        if (!cart) {
+            return NextResponse.json({
+                success: true,
+                message: "購物車已為空",
+            });
+        }
+
+        // 刪除購物車所有項目並重設總額
+        await db.$transaction([
+            db.cartItem.deleteMany({
+                where: { cartId: cart.id },
+            }),
+            db.cart.update({
+                where: { id: cart.id },
+                data: { total: 0 },
+            }),
+        ]);
+
+        return NextResponse.json({
+            success: true,
+            message: "購物車已清空",
+        });
+    } catch (error) {
+        console.error("清空購物車錯誤:", error);
+        return NextResponse.json(
+            { success: false, error: { code: "INTERNAL_ERROR", message: "清空購物車失敗" } },
+            { status: 500 }
+        );
+    }
+}
