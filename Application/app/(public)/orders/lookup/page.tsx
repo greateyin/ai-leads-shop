@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 interface OrderItem {
@@ -61,6 +61,19 @@ export default function OrderLookupPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [order, setOrder] = useState<OrderData | null>(null);
+    const [shopSlug, setShopSlug] = useState<string | null>(null);
+
+    // 取得當前商店 slug 以限定查詢範圍
+    useEffect(() => {
+        fetch("/api/shops/public")
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.success && data.data?.slug) {
+                    setShopSlug(data.data.slug);
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -72,7 +85,7 @@ export default function OrderLookupPage() {
             const response = await fetch("/api/orders/lookup", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, orderNo }),
+                body: JSON.stringify({ email, orderNo, shopSlug: shopSlug || "" }),
             });
 
             const data = await response.json();

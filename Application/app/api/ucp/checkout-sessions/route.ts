@@ -287,6 +287,15 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
     try {
+        // [安全] 驗證 UCP 請求（API Key + 商家啟用狀態），與 POST 一致
+        const authResult = await verifyUcpRequest(request);
+        if (!authResult.success) {
+            return NextResponse.json(
+                formatUcpError("UNAUTHORIZED", authResult.error || "Authentication failed"),
+                { status: 401 }
+            );
+        }
+
         const { searchParams } = new URL(request.url);
         const sessionId = searchParams.get("sessionId");
         const merchantId = searchParams.get("merchantId");
@@ -298,11 +307,12 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // 從資料庫取得 Session
+        // 從資料庫取得 Session（額外綁定 tenantId 防止跨租戶讀取）
         const dbSession = await db.ucpCheckoutSession.findFirst({
             where: {
                 id: sessionId,
                 shopId: merchantId,
+                tenantId: authResult.context!.tenantId,
             },
         });
 

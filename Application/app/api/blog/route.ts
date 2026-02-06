@@ -126,6 +126,32 @@ export async function POST(request: NextRequest) {
     const { title, contentMdx, summary, coverImageUrl, seoTitle, seoDescription, status, categoryIds, tagIds } =
       validation.data;
 
+    // [安全] 驗證 categoryIds 屬於同一 tenant，防止跨租戶注入
+    if (categoryIds?.length) {
+      const validCategories = await db.blogCategory.count({
+        where: { id: { in: categoryIds }, tenantId: session.user.tenantId },
+      });
+      if (validCategories !== categoryIds.length) {
+        return NextResponse.json(
+          { success: false, error: { code: "INVALID_INPUT", message: "部分分類不存在或不屬於此租戶" } },
+          { status: 400 }
+        );
+      }
+    }
+
+    // [安全] 驗證 tagIds 屬於同一 tenant，防止跨租戶注入
+    if (tagIds?.length) {
+      const validTags = await db.blogTag.count({
+        where: { id: { in: tagIds }, tenantId: session.user.tenantId },
+      });
+      if (validTags !== tagIds.length) {
+        return NextResponse.json(
+          { success: false, error: { code: "INVALID_INPUT", message: "部分標籤不存在或不屬於此租戶" } },
+          { status: 400 }
+        );
+      }
+    }
+
     const post = await db.blogPost.create({
       data: {
         id: generateId(),
