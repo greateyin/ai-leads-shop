@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { authWithTenant } from "@/lib/api/auth-helpers";
+import { authWithTenant, isWriteRole } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { generateId } from "@/lib/id";
 import { deepseek } from "@ai-sdk/deepseek";
@@ -28,6 +28,14 @@ export async function POST(request: NextRequest) {
                     error: { code: "UNAUTHORIZED", message: "請先登入" },
                 },
                 { status: 401 }
+            );
+        }
+
+        // [RBAC] AI 工具需至少 STAFF 角色
+        if (!isWriteRole(session.user.role)) {
+            return NextResponse.json(
+                { success: false, error: { code: "FORBIDDEN", message: "權限不足" } },
+                { status: 403 }
             );
         }
 

@@ -130,7 +130,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (token.id) {
         try {
           const userTenant = await db.userTenant.findFirst({
-            where: { userId: token.id as string, isDefault: true },
+            where: { userId: token.id as string, isDefault: true, status: "ACTIVE" },
           });
           if (userTenant) {
             token.activeTenantId = userTenant.tenantId;

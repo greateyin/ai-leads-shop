@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { authWithTenant } from "@/lib/api/auth-helpers";
+import { authWithTenant, isWriteRole } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/utils";
 
@@ -80,6 +80,14 @@ export async function PUT(
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
                 { status: 401 }
+            );
+        }
+
+        // [RBAC] 商店設定需 ADMIN 以上角色
+        if (session.user.role !== "OWNER" && session.user.role !== "ADMIN") {
+            return NextResponse.json(
+                { success: false, error: { code: "FORBIDDEN", message: "權限不足" } },
+                { status: 403 }
             );
         }
 

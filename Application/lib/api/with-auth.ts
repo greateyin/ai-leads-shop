@@ -29,7 +29,7 @@ export type AuthenticatedHandler<T = unknown> = (
 /**
  * 允許的角色類型
  */
-export type UserRole = "OWNER" | "ADMIN" | "STAFF" | "CUSTOMER";
+export type UserRole = "OWNER" | "ADMIN" | "STAFF" | "VIEWER" | "CUSTOMER";
 
 /**
  * withAuth 選項
@@ -112,6 +112,7 @@ export function withAuth<T = unknown>(
                     where: {
                         userId: session.user.id,
                         tenantId: session.user.tenantId as string,
+                        status: "ACTIVE",
                     },
                     select: { role: true },
                 });

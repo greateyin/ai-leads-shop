@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { authWithTenant } from "@/lib/api/auth-helpers";
+import { authWithTenant, isWriteRole } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { generateId } from "@/lib/id";
 
@@ -90,6 +90,14 @@ export async function PATCH(
       );
     }
 
+    // [RBAC] 訂單狀態更新需至少 STAFF 角色（authWithTenant 已回傳 DB 實際角色）
+    if (!isWriteRole(session.user.role)) {
+      return NextResponse.json(
+        { success: false, error: { code: "FORBIDDEN", message: "權限不足" } },
+        { status: 403 }
+      );
+    }
+
     const { id } = await params;
     const body = await request.json();
     const validation = updateOrderSchema.safeParse(body);
@@ -118,24 +126,6 @@ export async function PATCH(
     // 狀態機驗證 (FSM Logic)
     // Prisma OrderStatus: PENDING, PAID, PROCESSING, SHIPPED, COMPLETED, CANCELLED, REFUNDING
     if (validation.data.status && validation.data.status !== order.status) {
-      // 權限檢查：只有 STAFF 或 OWNER 可以變更訂單狀態 (Spec)
-      const userTenant = await db.userTenant.findUnique({
-        where: { userId_tenantId: { userId: session.user.id, tenantId: session.user.tenantId } },
-      });
-      // 假設 session.user.role 已經是 OWNER，或 userTenant.role 是 STAFF/ADMIN
-      // 這裡簡化檢查：若 user 是 OWNER (session) 或有 userTenant 關聯 (STAFF)
-      // 注意：session.user.role 是全域角色 (OWNER, CUSTOMER)，UserTenant 是租戶內角色
-      // 這裡依賴 session 檢查：
-      const isOwner = session.user.role === "OWNER";
-      const isStaff = userTenant?.role === "STAFF" || userTenant?.role === "ADMIN";
-
-      if (!isOwner && !isStaff) {
-        return NextResponse.json(
-          { success: false, error: { code: "FORBIDDEN", message: "您沒有權限變更訂單狀態" } },
-          { status: 403 }
-        );
-      }
-
       const validTransitions: Record<string, string[]> = {
         PENDING: ["PAID", "CANCELLED"],
         PAID: ["PROCESSING", "REFUNDING", "CANCELLED"],

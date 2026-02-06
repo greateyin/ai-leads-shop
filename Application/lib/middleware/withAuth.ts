@@ -1,4 +1,8 @@
 /**
+ * @deprecated 此檔案已棄用，請改用 `@/lib/api/with-auth.ts` 或 `@/lib/api/auth-helpers.ts`。
+ * 此版本使用小寫角色名稱（owner/admin/staff），與現行系統的大寫角色（OWNER/ADMIN/STAFF/VIEWER）不一致。
+ * 且未包含 status=ACTIVE 過濾、membership DB 驗證等安全機制。
+ *
  * withAuth - Unified authentication middleware for API Route Handlers
  *
  * As specified in program_spec.md:

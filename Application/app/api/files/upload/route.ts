@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { authWithTenant } from "@/lib/api/auth-helpers";
+import { authWithTenant, isWriteRole } from "@/lib/api/auth-helpers";
 import { uploadToStorage, getStorageConfig } from "@/lib/storage";
 import { generateId } from "@/lib/id";
 
@@ -62,6 +62,11 @@ export async function POST(request: NextRequest) {
         const { session } = await authWithTenant();
         if (!session) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        // [RBAC] 寫入操作需至少 STAFF 角色
+        if (!isWriteRole(session.user.role)) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 
         // Parse form data

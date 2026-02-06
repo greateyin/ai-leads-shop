@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { authWithTenant } from "@/lib/api/auth-helpers";
+import { authWithTenant, isWriteRole } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/utils";
 import { generateId } from "@/lib/id";
@@ -77,6 +77,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
         { status: 401 }
+      );
+    }
+
+    // [RBAC] 寫入操作需至少 STAFF 角色
+    if (!isWriteRole(session.user.role)) {
+      return NextResponse.json(
+        { success: false, error: { code: "FORBIDDEN", message: "權限不足" } },
+        { status: 403 }
       );
     }
 

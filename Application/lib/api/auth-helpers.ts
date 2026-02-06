@@ -18,6 +18,20 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 /**
+ * 可執行寫入操作的角色清單（VIEWER 為唯讀，不可寫入）
+ */
+export const WRITE_ROLES = ["OWNER", "ADMIN", "STAFF"] as const;
+
+/**
+ * 檢查角色是否具有寫入權限（至少 STAFF）
+ * @param role - 使用者角色
+ * @returns 是否可寫入
+ */
+export function isWriteRole(role: string): boolean {
+    return (WRITE_ROLES as readonly string[]).includes(role);
+}
+
+/**
  * 驗證結果介面
  */
 export interface TenantAuthResult {
@@ -92,6 +106,7 @@ export async function authWithTenant(
             where: {
                 userId: session.user.id,
                 tenantId,
+                status: "ACTIVE",
             },
             select: { role: true },
         });

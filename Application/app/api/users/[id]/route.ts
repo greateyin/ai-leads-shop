@@ -8,7 +8,7 @@ import { generateId } from "@/lib/id";
  * 更新用戶 Schema
  */
 const updateUserSchema = z.object({
-    role: z.enum(["ADMIN", "STAFF"]).optional(),
+    role: z.enum(["ADMIN", "STAFF", "VIEWER"]).optional(),
 });
 
 /**

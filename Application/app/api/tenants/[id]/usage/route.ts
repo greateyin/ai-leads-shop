@@ -24,13 +24,12 @@ export async function GET(
 
     const { id: tenantId } = await params;
 
-    // 驗證使用者權限
-    const userTenant = await db.userTenant.findUnique({
+    // 驗證使用者權限（必須為 ACTIVE 狀態）
+    const userTenant = await db.userTenant.findFirst({
       where: {
-        userId_tenantId: {
-          userId: session.user.id,
-          tenantId,
-        },
+        userId: session.user.id,
+        tenantId,
+        status: "ACTIVE",
       },
     });
 

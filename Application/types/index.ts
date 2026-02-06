@@ -14,7 +14,7 @@ export interface UserDTO {
   id: string;
   name: string | null;
   email: string;
-  role: "OWNER" | "ADMIN" | "STAFF" | "CUSTOMER";
+  role: "OWNER" | "ADMIN" | "STAFF" | "VIEWER" | "CUSTOMER";
   avatarUrl: string | null;
   tenantId: string | null;
 }

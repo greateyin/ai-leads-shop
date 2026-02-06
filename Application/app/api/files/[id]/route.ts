@@ -4,6 +4,63 @@ import { authWithTenant } from "@/lib/api/auth-helpers";
 import { deleteFromStorage } from "@/lib/storage";
 
 /**
+ * 驗證公開檔案請求的 Origin/Referer 是否來自該租戶的合法網域。
+ * 防止跨租戶 hotlinking 或嵌入公開資產。
+ *
+ * - 有 Origin/Referer：必須匹配租戶 subdomain 或主應用程式網域
+ * - 無 Origin/Referer：允許（直接瀏覽器存取）
+ */
+async function isPublicOriginAllowed(
+    tenantId: string,
+    request: NextRequest
+): Promise<boolean> {
+    const origin = request.headers.get("origin");
+    const referer = request.headers.get("referer");
+
+    // 無 origin/referer → 直接瀏覽器存取或 SSR，允許
+    if (!origin && !referer) return true;
+
+    // 解析來源 hostname
+    const sourceUrl = origin || referer || "";
+    let sourceHost: string;
+    try {
+        sourceHost = new URL(sourceUrl).hostname;
+    } catch {
+        return false; // URL 格式錯誤
+    }
+
+    // 查詢租戶 subdomain
+    const tenant = await db.tenant.findUnique({
+        where: { id: tenantId },
+        select: { subdomain: true },
+    });
+    if (!tenant) return false;
+
+    // 建立允許的 hostname 清單
+    const allowedHosts: string[] = ["localhost"];
+
+    // 租戶 subdomain（如 myshop.aisell.tw）及主網域
+    const baseDomain = process.env.NEXT_PUBLIC_BASE_URL;
+    if (baseDomain) {
+        try {
+            const baseHost = new URL(baseDomain).hostname;
+            allowedHosts.push(baseHost);
+            allowedHosts.push(`${tenant.subdomain}.${baseHost}`);
+        } catch { /* ignore parse error */ }
+    }
+
+    // 應用程式 URL（開發環境如 localhost:3000）
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (appUrl) {
+        try {
+            allowedHosts.push(new URL(appUrl).hostname);
+        } catch { /* ignore parse error */ }
+    }
+
+    return allowedHosts.includes(sourceHost);
+}
+
+/**
  * Check if user has access to a file based on entityType and ownership
  */
 async function checkFileAccess(
@@ -15,16 +72,17 @@ async function checkFileAccess(
     },
     userId: string | undefined,
     userTenantId: string | undefined,
-    userRole: string | undefined
+    userRole: string | undefined,
+    request: NextRequest
 ): Promise<boolean> {
     // [安全] 公開可存取的內容（已發布的商品/部落格圖片、商店 logo）不需要登入
-    // 但仍需確認內容確實已公開，不可讓未公開的檔案外洩
+    // 但需確認內容確實已公開，並驗證 Origin/Referer 匹配租戶網域
     if (file.entityType === "SHOP" && file.entityId) {
         const shop = await db.shop.findFirst({
             where: { id: file.entityId, tenantId: file.tenantId },
             select: { id: true },
         });
-        if (shop) return true;
+        if (shop) return isPublicOriginAllowed(file.tenantId, request);
     }
 
     if (file.entityType === "PRODUCT" && file.entityId) {
@@ -32,7 +90,7 @@ async function checkFileAccess(
             where: { id: file.entityId, tenantId: file.tenantId },
             select: { status: true },
         });
-        if (product?.status === "PUBLISHED") return true;
+        if (product?.status === "PUBLISHED") return isPublicOriginAllowed(file.tenantId, request);
     }
 
     if (file.entityType === "BLOG" && file.entityId) {
@@ -40,7 +98,7 @@ async function checkFileAccess(
             where: { id: file.entityId, tenantId: file.tenantId },
             select: { status: true },
         });
-        if (post?.status === "PUBLISHED") return true;
+        if (post?.status === "PUBLISHED") return isPublicOriginAllowed(file.tenantId, request);
     }
 
     // [安全] 非公開內容 — 必須登入且有有效租戶
@@ -107,7 +165,7 @@ export async function GET(
         const userTenantId = session?.user?.tenantId;
         const userRole = session?.user?.role;
 
-        // Check access permission
+        // Check access permission（公開檔案會額外驗證 Origin/Referer）
         const hasAccess = await checkFileAccess(
             {
                 id: file.id,
@@ -117,7 +175,8 @@ export async function GET(
             },
             userId,
             userTenantId,
-            userRole
+            userRole,
+            request
         );
 
         if (!hasAccess) {

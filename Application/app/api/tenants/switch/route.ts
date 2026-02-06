@@ -46,13 +46,12 @@ export async function POST(request: NextRequest) {
 
     const { tenantId } = validation.data;
 
-    // 驗證使用者是否有權限存取此租戶
-    const userTenant = await db.userTenant.findUnique({
+    // 驗證使用者是否有權限存取此租戶（必須為 ACTIVE 狀態）
+    const userTenant = await db.userTenant.findFirst({
       where: {
-        userId_tenantId: {
-          userId: session.user.id,
-          tenantId,
-        },
+        userId: session.user.id,
+        tenantId,
+        status: "ACTIVE",
       },
       include: { tenant: true },
     });

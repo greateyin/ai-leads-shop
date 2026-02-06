@@ -38,13 +38,12 @@ export async function GET(
 
     const { id: tenantId } = await params;
 
-    // 驗證使用者權限
-    const userTenant = await db.userTenant.findUnique({
+    // 驗證使用者權限（必須為 ACTIVE 狀態）
+    const userTenant = await db.userTenant.findFirst({
       where: {
-        userId_tenantId: {
-          userId: session.user.id,
-          tenantId,
-        },
+        userId: session.user.id,
+        tenantId,
+        status: "ACTIVE",
       },
     });
 
@@ -109,13 +108,12 @@ export async function PUT(
 
     const { id: tenantId } = await params;
 
-    // 驗證使用者權限 (需要 OWNER 或 ADMIN)
-    const userTenant = await db.userTenant.findUnique({
+    // 驗證使用者權限（需要 ACTIVE 的 OWNER 或 ADMIN）
+    const userTenant = await db.userTenant.findFirst({
       where: {
-        userId_tenantId: {
-          userId: session.user.id,
-          tenantId,
-        },
+        userId: session.user.id,
+        tenantId,
+        status: "ACTIVE",
       },
     });
 

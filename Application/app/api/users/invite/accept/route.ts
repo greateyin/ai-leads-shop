@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { authWithTenant } from "@/lib/api/auth-helpers";
+import { auth } from "@/lib/auth";
 import { generateId } from "@/lib/id";
 
 /**
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
         }
 
         // 檢查用戶是否已登入
-        const { session } = await authWithTenant({ requireTenant: false });
+        const session = await auth();
 
         if (!session?.user?.id) {
             // 未登入，返回需要登入的資訊
