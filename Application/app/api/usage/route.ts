@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 
 /**
@@ -10,8 +10,8 @@ import { db } from "@/lib/db";
  */
 export async function GET() {
     try {
-        const session = await auth();
-        if (!session?.user?.id || !session?.user?.tenantId) {
+        const { session } = await authWithTenant();
+        if (!session) {
             return NextResponse.json(
                 {
                     success: false,

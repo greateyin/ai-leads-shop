@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { generateId } from "@/lib/id";
 import { deepseek } from "@ai-sdk/deepseek";
@@ -20,8 +20,8 @@ const generateBlogSummarySchema = z.object({
  */
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.tenantId) {
+        const { session } = await authWithTenant();
+        if (!session) {
             return NextResponse.json(
                 {
                     success: false,

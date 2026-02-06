@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { generateId } from "@/lib/id";
 
@@ -25,7 +25,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
+    const { session } = await authWithTenant({ requireTenant: false });
     if (!session?.user?.id) {
       return NextResponse.json(
         {
@@ -96,7 +96,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
+    const { session } = await authWithTenant({ requireTenant: false });
     if (!session?.user?.id) {
       return NextResponse.json(
         {

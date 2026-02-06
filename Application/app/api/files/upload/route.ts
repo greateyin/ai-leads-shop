@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { uploadToStorage, getStorageConfig } from "@/lib/storage";
 import { generateId } from "@/lib/id";
 
@@ -58,9 +58,9 @@ const ALLOWED_MIME_TYPES = [
  */
 export async function POST(request: NextRequest) {
     try {
-        // Check authentication
-        const session = await auth();
-        if (!session?.user?.id) {
+        // Check authentication（authWithTenant 驗證 membership + tenantId）
+        const { session } = await authWithTenant();
+        if (!session) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 

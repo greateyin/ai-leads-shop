@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import crypto from "crypto";
 import { db } from "@/lib/db";
 import { generateId } from "@/lib/id";
 
@@ -89,9 +90,13 @@ export async function POST(request: NextRequest) {
         if (ecpayResult.success) {
             const data = ecpayResult.data;
 
-            // 從 trackingNumber 或 MerchantTradeNo 找到物流訂單
+            // [安全] 用 MerchantID 限定 provider 範圍 + trackingNumber/orderNo 聯合查詢
+            // 防止 trackingNumber 碰撞時跨租戶誤匹配
             const shippingOrder = await db.shippingOrder.findFirst({
                 where: {
+                    provider: {
+                        config: { path: ["merchantId"], equals: data.MerchantID },
+                    },
                     OR: [
                         { trackingNumber: data.AllPayLogisticsID },
                         { order: { orderNo: data.MerchantTradeNo } },
@@ -99,10 +104,10 @@ export async function POST(request: NextRequest) {
                 },
                 include: {
                     order: {
-                        select: { id: true, userId: true, user: { select: { email: true } } },
+                        select: { id: true, userId: true, tenantId: true, user: { select: { email: true } } },
                     },
                     provider: {
-                        select: { config: true },
+                        select: { config: true, tenantId: true },
                     },
                 },
             });
@@ -203,16 +208,34 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ success: false, error: "ShippingOrder not found" }, { status: 404 });
             }
 
-            // [安全] 驗證 HMAC 簽章（如果供應商有設定金鑰）
+            // [安全] 強制驗證 HMAC 簽章 — 供應商必須設定 webhookSecret
             const genericProviderConfig = shippingOrder.provider?.config as { webhookSecret?: string } | null;
-            if (genericProviderConfig?.webhookSecret) {
-                const receivedSignature = request.headers.get("X-Webhook-Signature");
-                if (!receivedSignature) {
-                    console.error(`[Logistics Webhook] 缺少簽章 header: ${data.trackingNumber}`);
-                    return NextResponse.json({ success: false, error: "Missing signature" }, { status: 401 });
-                }
-                // TODO: 實作 HMAC 簽章驗證邏輯
+            if (!genericProviderConfig?.webhookSecret) {
+                console.error(`[Logistics Webhook] 拒絕處理：供應商 ${data.provider} 未設定 webhookSecret`);
+                return NextResponse.json({ success: false, error: "Webhook secret not configured" }, { status: 400 });
             }
+
+            const receivedSignature = request.headers.get("X-Webhook-Signature");
+            if (!receivedSignature) {
+                console.error(`[Logistics Webhook] 缺少簽章 header: ${data.trackingNumber}`);
+                return NextResponse.json({ success: false, error: "Missing signature" }, { status: 401 });
+            }
+
+            // HMAC-SHA256 簽章驗證：用 webhookSecret 對 raw body 產生簽章，比對 header
+            const rawBody = JSON.stringify(payload);
+            const expectedSignature = crypto
+                .createHmac("sha256", genericProviderConfig.webhookSecret)
+                .update(rawBody, "utf8")
+                .digest("hex");
+
+            // 使用 timingSafeEqual 避免 timing attack
+            const sigBuffer = Buffer.from(receivedSignature, "hex");
+            const expectedBuffer = Buffer.from(expectedSignature, "hex");
+            if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+                console.error(`[Logistics Webhook] 簽章驗證失敗: ${data.trackingNumber}`);
+                return NextResponse.json({ success: false, error: "Invalid signature" }, { status: 401 });
+            }
+            console.log(`[Logistics Webhook] 簽章驗證成功: ${data.trackingNumber}`);
 
             // 更新物流訂單狀態（tenantId 限制）
             await db.shippingOrder.update({

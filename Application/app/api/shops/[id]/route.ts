@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/utils";
 
@@ -27,8 +27,8 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session?.user?.tenantId) {
+        const { session } = await authWithTenant();
+        if (!session) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
                 { status: 401 }
@@ -75,8 +75,8 @@ export async function PUT(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session?.user?.tenantId) {
+        const { session } = await authWithTenant();
+        if (!session) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
                 { status: 401 }
@@ -116,7 +116,7 @@ export async function PUT(
         }
 
         const shop = await db.shop.update({
-            where: { id },
+            where: { id, tenantId: session.user.tenantId },
             data: {
                 ...validation.data,
                 slug,

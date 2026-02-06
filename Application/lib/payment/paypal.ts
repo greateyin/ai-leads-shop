@@ -183,7 +183,8 @@ export async function refundPayPalCapture(
 
 /**
  * 驗證 PayPal Webhook 簽名
- * 注意：PayPal webhook 驗證需要額外的 API 呼叫
+ * 使用 PayPal Notification Verify API 驗證 webhook 來源
+ * @see https://developer.paypal.com/docs/api/webhooks/v1/#verify-webhook-signature_post
  */
 export async function verifyPayPalWebhook(
     config: PayPalConfig,
@@ -191,21 +192,75 @@ export async function verifyPayPalWebhook(
     headers: Record<string, string>,
     body: string
 ): Promise<boolean> {
-    // PayPal webhook 驗證較複雜，需要呼叫 PayPal API
-    // 這裡簡化處理，實際應使用 PayPal 提供的驗證 API
     const transmissionId = headers["paypal-transmission-id"];
     const transmissionTime = headers["paypal-transmission-time"];
     const certUrl = headers["paypal-cert-url"];
     const authAlgo = headers["paypal-auth-algo"];
     const transmissionSig = headers["paypal-transmission-sig"];
 
+    // 缺少任何必要 header 即驗證失敗
     if (!transmissionId || !transmissionTime || !certUrl || !authAlgo || !transmissionSig) {
+        console.error("[PayPal] Webhook 缺少必要驗證 headers");
         return false;
     }
 
-    // TODO: 實作完整的 webhook 簽名驗證
-    // 需要下載 PayPal 證書並驗證簽名
-    console.log(`[PayPal] Webhook verification - webhookId: ${webhookId}`);
+    // 呼叫 PayPal Notification Verify API
+    const apiBase = config.mode === "live"
+        ? "https://api-m.paypal.com"
+        : "https://api-m.sandbox.paypal.com";
 
-    return true; // 暫時信任所有 webhook
+    try {
+        // 取得 access token
+        const tokenResponse = await fetch(`${apiBase}/v1/oauth2/token`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
+            },
+            body: "grant_type=client_credentials",
+        });
+
+        if (!tokenResponse.ok) {
+            console.error("[PayPal] 取得 access token 失敗");
+            return false;
+        }
+
+        const tokenData = await tokenResponse.json();
+        const accessToken = tokenData.access_token;
+
+        // 呼叫驗證 API
+        const verifyResponse = await fetch(`${apiBase}/v1/notifications/verify-webhook-signature`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+                auth_algo: authAlgo,
+                cert_url: certUrl,
+                transmission_id: transmissionId,
+                transmission_sig: transmissionSig,
+                transmission_time: transmissionTime,
+                webhook_id: webhookId,
+                webhook_event: JSON.parse(body),
+            }),
+        });
+
+        if (!verifyResponse.ok) {
+            console.error(`[PayPal] Webhook 驗證 API 回傳 ${verifyResponse.status}`);
+            return false;
+        }
+
+        const verifyData = await verifyResponse.json();
+        const isValid = verifyData.verification_status === "SUCCESS";
+
+        if (!isValid) {
+            console.error(`[PayPal] Webhook 驗證失敗: ${verifyData.verification_status}`);
+        }
+
+        return isValid;
+    } catch (error) {
+        console.error("[PayPal] Webhook 驗證過程發生錯誤:", error);
+        return false;
+    }
 }

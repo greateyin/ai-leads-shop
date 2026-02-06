@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { generateOrderNo } from "@/lib/utils";
 import { generateId } from "@/lib/id";
@@ -100,7 +100,7 @@ export const GET = withStaffAuth(async (request: NextRequest, session: Authentic
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
+    const { session } = await authWithTenant({ requireTenant: false });
     const body = await request.json();
     const validation = createOrderSchema.safeParse(body);
 
@@ -124,6 +124,7 @@ export async function POST(request: NextRequest) {
     } = validation.data;
 
     // Determine if this is a guest checkout or authenticated checkout
+    // [安全] 判斷是否為訪客結帳：無 session 或無 tenantId
     const isGuestCheckout = !session?.user?.tenantId;
 
     // For guest checkout, we need either shopSlug or the shop context

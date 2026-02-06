@@ -16,34 +16,40 @@ export async function POST(request: NextRequest) {
       payload[key] = value.toString();
     });
 
-    // 驗證通知
-    const result = verifyNotification(
-      {
-        merchantId: process.env.ECPAY_MERCHANT_ID!,
-        hashKey: process.env.ECPAY_HASH_KEY!,
-        hashIV: process.env.ECPAY_HASH_IV!,
-      },
-      payload
-    );
-
-    if (!result.valid) {
-      console.error("ECPay 通知驗證失敗");
-      return new NextResponse("0|Error", { status: 400 });
-    }
-
-    // 記錄通知
-    const paymentId = result.orderId?.split("_")[0] || "";
+    // 先從 payload 取出 paymentId，查找對應的 tenant
+    const rawOrderId = payload.MerchantTradeNo || "";
+    const paymentId = rawOrderId.split("_")[0] || rawOrderId;
     const transactionNo = payload.TradeNo || "";
 
-    // 取得 payment 的 tenantId
     const payment = await db.payment.findUnique({
       where: { id: paymentId },
       select: { tenantId: true, orderId: true, status: true },
     });
 
-    // 如果找不到 payment，記錄錯誤並跳過通知
     if (!payment) {
       console.error(`ECPay 通知：找不到對應的付款記錄 (paymentId: ${paymentId})`);
+      return new NextResponse("0|Error", { status: 400 });
+    }
+
+    // [安全] 從 DB 取得該租戶的 ECPay 金鑰（而非全域 env var）
+    const ecpayProvider = await db.paymentProvider.findFirst({
+      where: { tenantId: payment.tenantId, type: "ECPAY" },
+      select: { config: true },
+    });
+
+    const providerConfig = ecpayProvider?.config as Record<string, string> | null;
+    const merchantId = providerConfig?.merchantId || providerConfig?.ECPAY_MERCHANT_ID || process.env.ECPAY_MERCHANT_ID!;
+    const hashKey = providerConfig?.hashKey || providerConfig?.ECPAY_HASH_KEY || process.env.ECPAY_HASH_KEY!;
+    const hashIV = providerConfig?.hashIV || providerConfig?.ECPAY_HASH_IV || process.env.ECPAY_HASH_IV!;
+
+    // 驗證通知（使用 tenant-specific 金鑰）
+    const result = verifyNotification(
+      { merchantId, hashKey, hashIV },
+      payload
+    );
+
+    if (!result.valid) {
+      console.error(`[ECPay] 通知驗證失敗 (tenant: ${payment.tenantId})`);
       return new NextResponse("0|Error", { status: 400 });
     }
 
@@ -83,10 +89,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 更新付款狀態
+    // 更新付款狀態（加 tenantId 限制）
     if (result.status === "paid") {
-      await db.payment.update({
-        where: { id: paymentId },
+      await db.payment.updateMany({
+        where: { id: paymentId, tenantId: payment.tenantId },
         data: {
           status: "PAID",
           transactionNo: payload.TradeNo,
@@ -95,9 +101,9 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 更新訂單狀態 (使用已取得的 payment.orderId)
-      await db.order.update({
-        where: { id: payment.orderId },
+      // 更新訂單狀態（加 tenantId 限制）
+      await db.order.updateMany({
+        where: { id: payment.orderId, tenantId: payment.tenantId },
         data: {
           paymentStatus: "PAID",
           status: "PAID",
@@ -115,7 +121,7 @@ export async function POST(request: NextRequest) {
       // 發送付款成功通知給顧客
       try {
         const order = await db.order.findFirst({
-          where: { id: payment.orderId },
+          where: { id: payment.orderId, tenantId: payment.tenantId },
           select: { orderNo: true, totalAmount: true, user: { select: { email: true } } },
         });
         if (order?.user?.email) {

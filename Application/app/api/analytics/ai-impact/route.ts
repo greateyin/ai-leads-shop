@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 
 /**
@@ -8,8 +8,8 @@ import { db } from "@/lib/db";
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId) {
+    const { session } = await authWithTenant();
+    if (!session) {
       return NextResponse.json(
         { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
         { status: 401 }

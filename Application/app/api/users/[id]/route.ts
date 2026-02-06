@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { generateId } from "@/lib/id";
 
@@ -20,8 +20,8 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session?.user?.tenantId || !session?.user?.id) {
+        const { session } = await authWithTenant();
+        if (!session) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
                 { status: 401 }
@@ -86,8 +86,8 @@ export async function PATCH(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session?.user?.tenantId || !session?.user?.id) {
+        const { session } = await authWithTenant();
+        if (!session) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
                 { status: 401 }
@@ -226,8 +226,8 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session?.user?.tenantId || !session?.user?.id) {
+        const { session } = await authWithTenant();
+        if (!session) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
                 { status: 401 }
@@ -237,17 +237,8 @@ export async function DELETE(
         const { id } = await params;
         const tenantId = session.user.tenantId;
 
-        // 驗證操作者權限
-        const operatorTenant = await db.userTenant.findUnique({
-            where: {
-                userId_tenantId: {
-                    userId: session.user.id,
-                    tenantId,
-                },
-            },
-        });
-
-        if (!operatorTenant || !["OWNER", "ADMIN"].includes(operatorTenant.role)) {
+        // 驗證操作者權限（authWithTenant 已驗證 membership，此處檢查角色）
+        if (!["OWNER", "ADMIN"].includes(session.user.role)) {
             return NextResponse.json(
                 { success: false, error: { code: "FORBIDDEN", message: "無權限移除成員" } },
                 { status: 403 }

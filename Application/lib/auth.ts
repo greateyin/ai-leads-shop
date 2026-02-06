@@ -156,8 +156,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.role = (token.activeTenantRole as string) || (token.role as string);
-        session.user.tenantId = (token.activeTenantId as string) || (token.tenantId as string);
+        // [安全] 只使用 activeTenantRole/activeTenantId（由 JWT callback 從 DB 即時查詢）
+        // 不可 fallback 到 token.role/token.tenantId，否則被移除的成員仍可存取
+        session.user.role = (token.activeTenantRole as string) || "CUSTOMER";
+        session.user.tenantId = (token.activeTenantId as string) || "";
       }
       return session;
     },

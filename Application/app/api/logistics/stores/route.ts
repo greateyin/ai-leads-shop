@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 
 /**
  * 超商門市資料介面
@@ -21,8 +21,8 @@ interface ConvenienceStore {
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId) {
+    const { session } = await authWithTenant();
+    if (!session) {
       return NextResponse.json(
         {
           success: false,

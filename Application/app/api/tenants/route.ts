@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 
 /**
@@ -158,8 +158,8 @@ export async function POST(request: NextRequest) {
  */
 export async function GET() {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId) {
+    const { session } = await authWithTenant();
+    if (!session) {
       return NextResponse.json(
         { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
         { status: 401 }
@@ -204,8 +204,8 @@ export async function GET() {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId || session.user.role !== "OWNER") {
+    const { session } = await authWithTenant();
+    if (!session || session.user.role !== "OWNER") {
       return NextResponse.json(
         { success: false, error: { code: "FORBIDDEN", message: "權限不足" } },
         { status: 403 }

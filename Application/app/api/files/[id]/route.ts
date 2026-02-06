@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { deleteFromStorage } from "@/lib/storage";
 
 /**
@@ -17,8 +17,39 @@ async function checkFileAccess(
     userTenantId: string | undefined,
     userRole: string | undefined
 ): Promise<boolean> {
-    // Must be from the same tenant
-    if (userTenantId && file.tenantId !== userTenantId) {
+    // [安全] 公開可存取的內容（已發布的商品/部落格圖片、商店 logo）不需要登入
+    // 但仍需確認內容確實已公開，不可讓未公開的檔案外洩
+    if (file.entityType === "SHOP" && file.entityId) {
+        const shop = await db.shop.findFirst({
+            where: { id: file.entityId, tenantId: file.tenantId },
+            select: { id: true },
+        });
+        if (shop) return true;
+    }
+
+    if (file.entityType === "PRODUCT" && file.entityId) {
+        const product = await db.product.findFirst({
+            where: { id: file.entityId, tenantId: file.tenantId },
+            select: { status: true },
+        });
+        if (product?.status === "PUBLISHED") return true;
+    }
+
+    if (file.entityType === "BLOG" && file.entityId) {
+        const post = await db.blogPost.findFirst({
+            where: { id: file.entityId, tenantId: file.tenantId },
+            select: { status: true },
+        });
+        if (post?.status === "PUBLISHED") return true;
+    }
+
+    // [安全] 非公開內容 — 必須登入且有有效租戶
+    if (!userId || !userTenantId) {
+        return false;
+    }
+
+    // [安全] 必須來自同一租戶（無 tenantId 時一律拒絕，不再跳過比對）
+    if (file.tenantId !== userTenantId) {
         return false;
     }
 
@@ -27,54 +58,18 @@ async function checkFileAccess(
         return true;
     }
 
-    // System files are public within tenant
+    // System files are accessible within tenant
     if (file.entityType === "SYSTEM") {
         return true;
     }
 
-    // Shop files - shops are public if they exist
-    if (file.entityType === "SHOP" && file.entityId) {
-        const shop = await db.shop.findFirst({
-            where: { id: file.entityId, tenantId: file.tenantId },
-            select: { id: true },
-        });
-        if (shop) {
-            return true;
-        }
-    }
-
-    // Product files - check if product is published
-    if (file.entityType === "PRODUCT" && file.entityId) {
-        const product = await db.product.findFirst({
-            where: { id: file.entityId, tenantId: file.tenantId },
-            select: { status: true },
-        });
-        if (product?.status === "PUBLISHED") {
-            return true;
-        }
-    }
-
-    // Blog files - check if post is published
-    if (file.entityType === "BLOG" && file.entityId) {
-        const post = await db.blogPost.findFirst({
-            where: { id: file.entityId, tenantId: file.tenantId },
-            select: { status: true },
-        });
-        if (post?.status === "PUBLISHED") {
-            return true;
-        }
-    }
-
-    // Order files - only accessible by order owner or staff
+    // Order files - only accessible by order owner
     if (file.entityType === "ORDER" && file.entityId) {
-        if (!userId) return false;
         const order = await db.order.findFirst({
             where: { id: file.entityId, tenantId: file.tenantId },
             select: { userId: true },
         });
-        if (order?.userId === userId) {
-            return true;
-        }
+        return order?.userId === userId;
     }
 
     // User files - only accessible by the owner
@@ -82,8 +77,8 @@ async function checkFileAccess(
         return file.entityId === userId;
     }
 
-    // Default: deny access for unauthenticated users
-    return !!userId;
+    // [安全] Default: deny — 未匹配的 entityType 一律拒絕
+    return false;
 }
 
 /**
@@ -106,8 +101,8 @@ export async function GET(
             return NextResponse.json({ error: "File not found" }, { status: 404 });
         }
 
-        // Get user session for authorization
-        const session = await auth();
+        // Get user session for authorization（使用 authWithTenant 驗證 membership）
+        const { session } = await authWithTenant({ requireTenant: false });
         const userId = session?.user?.id;
         const userTenantId = session?.user?.tenantId;
         const userRole = session?.user?.role;
@@ -181,12 +176,12 @@ export async function DELETE(
     try {
         const { id } = await params;
 
-        const session = await auth();
-        if (!session?.user?.id) {
+        const { session } = await authWithTenant();
+        if (!session) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        // Check if user is admin or owner
+        // Check if user is admin or owner（authWithTenant 已驗證 membership，此處檢查角色）
         if (session.user.role !== "OWNER" && session.user.role !== "ADMIN") {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
@@ -201,7 +196,7 @@ export async function DELETE(
             return NextResponse.json({ error: "File not found" }, { status: 404 });
         }
 
-        // Verify tenant access
+        // [安全] 驗證檔案屬於使用者的租戶
         if (file.tenantId !== session.user.tenantId) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
@@ -216,8 +211,8 @@ export async function DELETE(
             }
         }
 
-        // Delete from database
-        await db.file.delete({ where: { id } });
+        // Delete from database（加 tenantId 限制）
+        await db.file.delete({ where: { id, tenantId: session.user.tenantId } });
 
         return NextResponse.json({ success: true, deleted: id });
     } catch (error) {

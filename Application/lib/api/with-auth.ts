@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db, createTenantPrisma } from "@/lib/db";
-import type { PrismaClient } from "@prisma/client";
 
 /**
  * Session 類型擴展

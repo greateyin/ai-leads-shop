@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { deepseek } from "@ai-sdk/deepseek";
 import { streamText, UIMessage, convertToModelMessages } from "ai";
 
@@ -12,8 +12,8 @@ export const maxDuration = 30;
  */
 export async function POST(request: NextRequest) {
     try {
-        const session = await auth();
-        if (!session?.user?.tenantId) {
+        const { session } = await authWithTenant();
+        if (!session) {
             return new Response(
                 JSON.stringify({
                     success: false,

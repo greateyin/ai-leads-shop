@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 
 /**
@@ -16,7 +16,7 @@ const switchTenantSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
+    const { session } = await authWithTenant({ requireTenant: false });
     if (!session?.user?.id) {
       return NextResponse.json(
         {

@@ -13,33 +13,69 @@ export async function POST(request: NextRequest) {
     const TradeInfo = formData.get("TradeInfo")?.toString() || "";
     const TradeSha = formData.get("TradeSha")?.toString() || "";
 
-    // 驗證通知
-    const result = verifyNotification(
-      {
-        merchantId: process.env.NEWEBPAY_MERCHANT_ID!,
-        hashKey: process.env.NEWEBPAY_HASH_KEY!,
-        hashIV: process.env.NEWEBPAY_HASH_IV!,
-      },
-      { TradeInfo, TradeSha }
-    );
+    // [安全] 先嘗試用全域金鑰預解密，取得 paymentId 後再用 tenant-specific 金鑰驗證
+    // NewebPay 的流程是：解密 TradeInfo 得到 MerchantOrderNo，再查 payment
+    // 因為要知道用誰的金鑰解密，需先查 DB，但解密前不知道 tenant
+    // 策略：遍歷所有啟用 NewebPay 的 provider，嘗試驗證並找到對應的 tenant
+    const newebpayProviders = await db.paymentProvider.findMany({
+      where: { type: "NEWEBPAY" },
+      select: { tenantId: true, config: true },
+    });
 
-    if (!result.valid || !result.data) {
-      console.error("NewebPay 通知驗證失敗");
+    let verifiedResult: { valid: boolean; data?: { orderId: string; amount: number; status: string; message: string } } | null = null;
+    let matchedTenantId: string | null = null;
+
+    // 嘗試各租戶金鑰驗證
+    for (const provider of newebpayProviders) {
+      const cfg = provider.config as Record<string, string> | null;
+      if (!cfg) continue;
+      const mId = cfg.merchantId || cfg.NEWEBPAY_MERCHANT_ID;
+      const hKey = cfg.hashKey || cfg.NEWEBPAY_HASH_KEY;
+      const hIV = cfg.hashIV || cfg.NEWEBPAY_HASH_IV;
+      if (!mId || !hKey || !hIV) continue;
+
+      const tryResult = verifyNotification({ merchantId: mId, hashKey: hKey, hashIV: hIV }, { TradeInfo, TradeSha });
+      if (tryResult.valid && tryResult.data) {
+        verifiedResult = tryResult;
+        matchedTenantId = provider.tenantId;
+        break;
+      }
+    }
+
+    // 若所有 tenant-specific 金鑰都失敗，fallback 到全域 env var（過渡期）
+    if (!verifiedResult) {
+      const globalMerchantId = process.env.NEWEBPAY_MERCHANT_ID;
+      const globalHashKey = process.env.NEWEBPAY_HASH_KEY;
+      const globalHashIV = process.env.NEWEBPAY_HASH_IV;
+      if (globalMerchantId && globalHashKey && globalHashIV) {
+        verifiedResult = verifyNotification(
+          { merchantId: globalMerchantId, hashKey: globalHashKey, hashIV: globalHashIV },
+          { TradeInfo, TradeSha }
+        );
+      }
+    }
+
+    if (!verifiedResult?.valid || !verifiedResult.data) {
+      console.error("[NewebPay] 通知驗證失敗：所有金鑰均不符合");
       return NextResponse.json({ success: false }, { status: 400 });
     }
 
-    const paymentId = result.data.orderId.split("_")[0] || "";
+    const paymentId = verifiedResult.data.orderId.split("_")[0] || "";
 
-    // 取得 payment 的 tenantId
     const payment = await db.payment.findUnique({
       where: { id: paymentId },
       select: { tenantId: true, orderId: true },
     });
 
-    // 如果找不到 payment，記錄錯誤並跳過通知
     if (!payment) {
-      console.error(`NewebPay 通知：找不到對應的付款記錄 (paymentId: ${paymentId})`);
+      console.error(`[NewebPay] 找不到付款記錄 (paymentId: ${paymentId})`);
       return NextResponse.json({ success: false }, { status: 400 });
+    }
+
+    // [安全] 驗證 tenant 一致性：若從 provider 匹配到 tenant，確認與 payment 的 tenant 相同
+    if (matchedTenantId && matchedTenantId !== payment.tenantId) {
+      console.error(`[NewebPay] 跨租戶異常：驗簽 tenant=${matchedTenantId}, payment tenant=${payment.tenantId}`);
+      return NextResponse.json({ success: false }, { status: 403 });
     }
 
     // 記錄通知
@@ -49,25 +85,25 @@ export async function POST(request: NextRequest) {
         tenantId: payment.tenantId,
         paymentId,
         provider: "NEWEBPAY",
-        payload: { TradeInfo, TradeSha, ...result.data },
+        payload: { TradeInfo, TradeSha, ...verifiedResult.data },
         verified: true,
       },
     });
 
-    // 更新付款狀態
-    if (result.data.status === "paid") {
-      await db.payment.update({
-        where: { id: paymentId },
+    // 更新付款狀態（加 tenantId 限制）
+    if (verifiedResult.data.status === "paid") {
+      await db.payment.updateMany({
+        where: { id: paymentId, tenantId: payment.tenantId },
         data: {
           status: "PAID",
           paidAt: new Date(),
-          rawResponse: result.data,
+          rawResponse: verifiedResult.data,
         },
       });
 
-      // 更新訂單狀態 (使用已取得的 payment.orderId 和 tenantId)
-      await db.order.update({
-        where: { id: payment.orderId },
+      // 更新訂單狀態（加 tenantId 限制）
+      await db.order.updateMany({
+        where: { id: payment.orderId, tenantId: payment.tenantId },
         data: {
           paymentStatus: "PAID",
           status: "PAID",
@@ -85,7 +121,7 @@ export async function POST(request: NextRequest) {
       // 發送付款成功通知給顧客
       try {
         const order = await db.order.findFirst({
-          where: { id: payment.orderId },
+          where: { id: payment.orderId, tenantId: payment.tenantId },
           select: { orderNo: true, totalAmount: true, user: { select: { email: true } } },
         });
         if (order?.user?.email) {

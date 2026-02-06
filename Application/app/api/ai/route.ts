@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { createAIService } from "@/lib/ai";
 import { generateId } from "@/lib/id";
@@ -25,8 +25,8 @@ const aiRequestSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId) {
+    const { session } = await authWithTenant();
+    if (!session) {
       return NextResponse.json(
         {
           success: false,
@@ -177,8 +177,8 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId) {
+    const { session } = await authWithTenant();
+    if (!session) {
       return NextResponse.json(
         {
           success: false,

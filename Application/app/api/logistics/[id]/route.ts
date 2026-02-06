@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 
 /**
@@ -11,8 +11,8 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session?.user?.tenantId) {
+        const { session } = await authWithTenant();
+        if (!session) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
                 { status: 401 }
@@ -72,8 +72,8 @@ export async function PATCH(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session?.user?.tenantId) {
+        const { session } = await authWithTenant();
+        if (!session) {
             return NextResponse.json(
                 { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
                 { status: 401 }
@@ -118,8 +118,9 @@ export async function PATCH(
                     : status === "CANCELLED" ? "RETURNED"
                         : "PREPARING";
 
-            await db.order.update({
-                where: { id: shippingOrder.orderId },
+            // [安全] 加 tenantId 限制防止跨租戶更新
+            await db.order.updateMany({
+                where: { id: shippingOrder.orderId, tenantId: session.user.tenantId },
                 data: { shippingStatus: orderShippingStatus },
             });
         }

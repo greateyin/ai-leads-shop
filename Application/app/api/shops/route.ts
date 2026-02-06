@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { authWithTenant } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/utils";
 import { generateId } from "@/lib/id";
@@ -24,8 +24,8 @@ const shopSchema = z.object({
  */
 export async function GET() {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId) {
+    const { session } = await authWithTenant();
+    if (!session) {
       return NextResponse.json(
         { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
         { status: 401 }
@@ -61,8 +61,8 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.tenantId) {
+    const { session } = await authWithTenant();
+    if (!session) {
       return NextResponse.json(
         { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
         { status: 401 }
