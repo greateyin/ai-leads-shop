@@ -78,6 +78,9 @@ app/
       logistics/route.ts        # 物流 API
       blog/route.ts             # 文章 API
       ai/route.ts               # AI 服務 proxy
+      ucp/route.ts              # Universal Commerce Protocol (Agentic Commerce)
+      files/route.ts            # 檔案上傳與管理
+      cron/route.ts             # 排程任務
 lib/
   auth.ts                # Auth.js 設定 providers、callbacks
   db.ts                  # 資料庫初始化、RLS middleware
@@ -263,6 +266,51 @@ API 端點：
 | `/api/ai/generate-description` | POST | 呼叫 `generateDescription`；回傳描述與 FAQ |
 | `/api/ai/chat` | POST/WS | 建立聊天連線；返回串流回覆 |
 | `/api/ai/sales-forecast` | POST | 根據歷史訂單資料預測銷售趨勢；回傳時間序列資料 |
+
+### Universal Commerce Protocol (UCP) 模組
+
+UCP 模組實作了 "Agentic Commerce" 協議，允許外部 AI Agent (如 Google Shopping Agent) 直接發現商品並進行結帳。
+
+核心邏輯：
+*   **Discovery**: 提供符合 Schema.org 與 UCP 規範的商品結構化資料。
+*   **Checkout Session**: 透過 `ucp_checkout_sessions` 表管理 Agent 發起的結帳請求。
+*   **Webhooks**: 接收 Agent 的狀態更新通知。
+
+API 端點：
+
+| 路由 | 方法 | 功能 |
+|---|---|---|
+| `/api/ucp/discovery` | GET | 返回符合 UCP 規範的商品清單與 Capabilities |
+| `/api/ucp/sessions` | POST | 創建 UCP 結帳 Session；接收外部購物車資料 |
+| `/api/ucp/sessions/{id}` | GET | 查詢 Session 狀態 |
+| `/api/ucp/webhook` | POST | 接收 UCP 平台 (如 Google) 的回調 |
+
+### 檔案管理模組 (File Management)
+
+檔案模組提供統一的檔案上傳與管理介面，支援多種儲存後端 (S3/R2/Blob)。
+
+核心邏輯：
+*   **Upload**: 支援 Multipart upload 或 Presigned URL。
+*   **Polymorphic Association**: 使用 `entityType` + `entityId` 將檔案關聯至任意資源。
+
+API 端點：
+
+| 路由 | 方法 | 功能 |
+|---|---|---|
+| `/api/files/upload` | POST | 上傳檔案；支援 `multipart/form-data` |
+| `/api/files/{id}` | GET | 獲取檔案資訊或下載連結 |
+| `/api/files/{id}` | DELETE | 刪除檔案 |
+
+### 排程任務模組 (Cron)
+
+使用 Vercel Cron 或外部觸發器執行的定期任務。
+
+API 端點：
+
+| 路由 | 方法 | 功能 |
+|---|---|---|
+| `/api/cron/daily` | GET | 每日任務：彙整報表、清理過期 Session |
+| `/api/cron/hourly` | GET | 每小時任務：更新匯率、檢查庫存預警 |
 
 ### 分析與報表模組
 

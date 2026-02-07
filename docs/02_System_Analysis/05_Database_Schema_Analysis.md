@@ -31,6 +31,14 @@ The database design for **AIsell** is a modern, **Multi-Tenant SaaS** schema bui
 #### SaaS Billing & Usage
 *   **Native Metering**: `tenant_usage_metrics` and `tenant_api_limits` tables are built-in. This enables defining "Seed/Growth/Pro" plans based on actual usage (AI tokens, storage), which is essential for the AI-driven business model.
 
+#### Universal Commerce Protocol (UCP)
+*   **Agentic Commerce**: The `ucp_checkout_sessions` table supports the "Universal Commerce Protocol," allowing AI agents (like Google's) to discover products and negotiate checkout directly.
+*   **Platform Agnostic**: Fields like `platformId` and `paymentHandlers` (JSON) enable interoperability with various AI buying agents without changing the core order logic.
+
+#### File Management
+*   **Unified Storage**: The `files` table uses a polymorphic design (`entityType` + `entityId`) to attach files to any resource (Products, Blogs, Orders).
+*   **Hybrid Storage**: Supports both database storage (`data` column for small files) and external blob storage (`blobUrl` for S3/R2), controlled by `SystemSettings`.
+
 ## 3. Key Strengths
 1.  **Flexibility**: Extensive use of `JSONB` in `config` columns (shops, payment_providers) allows adding new third-party integrations (e.g., a new logistics provider) without schema migrations.
 2.  **AI Attribution**: The `ai_attributions` table directly links AI interactions to Orders for revenue calculation. This is vital for the "Cost Per Sale" (CPS) commission model mentioned in the PRD.

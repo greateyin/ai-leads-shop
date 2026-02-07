@@ -154,6 +154,19 @@ export async function PUT(
 
     const { categoryIds, ...updateData } = validation.data;
 
+    // [安全] 驗證 categoryIds 屬於同一 tenant，防止跨租戶注入
+    if (categoryIds && categoryIds.length > 0) {
+      const validCategories = await db.productCategory.count({
+        where: { id: { in: categoryIds }, tenantId: session.user.tenantId },
+      });
+      if (validCategories !== categoryIds.length) {
+        return NextResponse.json(
+          { success: false, error: { code: "INVALID_INPUT", message: "部分商品分類不存在或不屬於此租戶" } },
+          { status: 400 }
+        );
+      }
+    }
+
     // 產品更新限制 Logic (Spec Section 4.3)
     // 若產品已發布，僅允許特定欄位可編輯 (如價格、庫存、OG metadata)
     if (existingProduct.status === "PUBLISHED") {

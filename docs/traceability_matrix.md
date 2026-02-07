@@ -31,7 +31,12 @@ This matrix maps User Stories and Requirements from the PRD to Technical Compone
 | **Infrastructure** | | | | | |
 | withAuth RBAC | Spec#認證 | Auth Middleware | Auth Module | ⚠️ Partial | 已遷移 products/orders/refund，其餘路由待遷移 |
 | Analytics Dashboard | [01_PRD_Main.md](01_Product_Requirements/01_PRD_Main.md)#2.1 | Analytics Service | Analytics Module | ⚠️ Partial | 路由存在但 ClickHouse/BigQuery 尚未整合 |
-| 背景排程 (Cron) | Spec#背景作業 | Cron Service | Background Jobs | ⚠️ Partial | usage-calculation 已實作，其餘 cron 待完成 |
+| 背景排程 (Cron) | Spec#背景作業 | Cron Service | Background Jobs | ✅ Implemented | `/api/cron/hourly`, `/api/cron/daily` |
+| **Agentic Commerce** | | | | | |
+| UCP Discovery | SA#UCP | UCP Service | UCP Module | ✅ Implemented | `/api/ucp/discovery` |
+| UCP Checkout | SA#UCP | UCP Service | UCP Module | ✅ Implemented | `/api/ucp/sessions` |
+| **Foundation** | | | | | |
+| File Management | SA#File | File Service | File Module | ✅ Implemented | `/api/files` (S3/R2/Blob) |
 
 ## File Mapping
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { authWithTenant } from "@/lib/api/auth-helpers";
+import { authWithTenant, isWriteRole } from "@/lib/api/auth-helpers";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/utils";
 import { generateId } from "@/lib/id";
@@ -66,6 +66,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: { code: "UNAUTHORIZED", message: "請先登入" } },
         { status: 401 }
+      );
+    }
+
+    // [RBAC] 建立商店需至少 ADMIN 角色
+    const adminRoles = ["OWNER", "ADMIN"];
+    if (!adminRoles.includes(session.user.role)) {
+      return NextResponse.json(
+        { success: false, error: { code: "FORBIDDEN", message: "權限不足，僅 ADMIN 以上可建立商店" } },
+        { status: 403 }
       );
     }
 

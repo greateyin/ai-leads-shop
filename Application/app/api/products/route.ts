@@ -141,6 +141,19 @@ export const POST = withStaffAuth(async (request: NextRequest, session: Authenti
       );
     }
 
+    // [安全] 驗證 categoryIds 屬於同一 tenant，防止跨租戶注入
+    if (categoryIds && categoryIds.length > 0) {
+      const validCategories = await db.productCategory.count({
+        where: { id: { in: categoryIds }, tenantId: session.user.tenantId },
+      });
+      if (validCategories !== categoryIds.length) {
+        return NextResponse.json(
+          { success: false, error: { code: "INVALID_INPUT", message: "部分商品分類不存在或不屬於此租戶" } },
+          { status: 400 }
+        );
+      }
+    }
+
     const productId = generateId();
 
     const product = await db.$transaction(async (tx) => {
