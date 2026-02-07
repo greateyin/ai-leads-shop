@@ -1,100 +1,57 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { resolveTenantFromRequest } from "@/lib/tenant/resolve-tenant";
+
+/** 商店公開欄位 select */
+const SHOP_PUBLIC_SELECT = {
+    id: true,
+    name: true,
+    slug: true,
+    currency: true,
+    timezone: true,
+    locale: true,
+    logoUrl: true,
+    description: true,
+} as const;
 
 /**
  * GET /api/shops/public
  * 取得公開商店資訊（無需登入）
- * 
+ *
  * 用於結帳流程中取得商店的基本資訊，如 ID、名稱、幣別等
  * Query params:
- * - slug: 商店 slug（可選）
- * - domain: 商店自訂網域（可選）
- * 
- * 若未提供參數，嘗試從請求 host 推斷或返回預設商店
+ * - slug: 商店 slug（可選，需同時屬於當前租戶）
+ *
+ * 若未提供 slug，使用共用 tenant resolver 從 host 解析
  */
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const slug = searchParams.get("slug");
-        const domain = searchParams.get("domain");
 
-        // 嘗試透過 host header 推斷商店
-        const host = request.headers.get("host") || "";
+        // 使用共用 resolver 解析租戶
+        const tenant = await resolveTenantFromRequest(request);
 
         let shop;
 
-        if (slug) {
-            // 透過 slug 查詢
+        if (slug && tenant) {
+            // 透過 slug 查詢，但限定在當前租戶內（防止跨租戶）
+            shop = await db.shop.findFirst({
+                where: { slug, tenantId: tenant.tenantId },
+                select: SHOP_PUBLIC_SELECT,
+            });
+        } else if (slug) {
+            // 無法解析租戶時，僅以 slug 查詢（localhost 開發場景）
             shop = await db.shop.findUnique({
                 where: { slug },
-                select: {
-                    id: true,
-                    name: true,
-                    slug: true,
-                    currency: true,
-                    timezone: true,
-                    locale: true,
-                    logoUrl: true,
-                    description: true,
-                },
+                select: SHOP_PUBLIC_SELECT,
             });
-        } else if (domain) {
-            // 透過自訂網域查詢
+        } else if (tenant) {
+            // 無 slug 時，使用 resolver 結果的商店
             shop = await db.shop.findFirst({
-                where: { domain },
-                select: {
-                    id: true,
-                    name: true,
-                    slug: true,
-                    currency: true,
-                    timezone: true,
-                    locale: true,
-                    logoUrl: true,
-                    description: true,
-                },
+                where: { id: tenant.shopId },
+                select: SHOP_PUBLIC_SELECT,
             });
-        } else {
-            // 嘗試從 host 推斷 subdomain
-            // 格式: {subdomain}.example.com 或 localhost:3000
-            const subdomain = host.split(".")[0];
-
-            // 先嘗試透過 subdomain 查詢 tenant
-            const tenant = await db.tenant.findFirst({
-                where: { subdomain },
-                include: {
-                    shops: {
-                        take: 1,
-                        select: {
-                            id: true,
-                            name: true,
-                            slug: true,
-                            currency: true,
-                            timezone: true,
-                            locale: true,
-                            logoUrl: true,
-                            description: true,
-                        },
-                    },
-                },
-            });
-
-            shop = tenant?.shops[0] || null;
-
-            // 若找不到，返回第一個可用的商店（開發環境用）
-            if (!shop && (host.includes("localhost") || host.includes("127.0.0.1"))) {
-                shop = await db.shop.findFirst({
-                    select: {
-                        id: true,
-                        name: true,
-                        slug: true,
-                        currency: true,
-                        timezone: true,
-                        locale: true,
-                        logoUrl: true,
-                        description: true,
-                    },
-                });
-            }
         }
 
         if (!shop) {

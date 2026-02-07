@@ -1,6 +1,8 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { db } from "@/lib/db";
+import { resolveTenant } from "@/lib/tenant/resolve-tenant";
 import { generateBlogOpenGraph } from "@/components/seo/opengraph-meta";
 import { renderMdx } from "@/lib/mdx";
 
@@ -14,15 +16,14 @@ async function BlogContent({ content }: { content: string }) {
 }
 /**
  * 取得文章資料
+ * tenantId 確保租戶隔離
  */
-async function getPost(slug: string, tenantSubdomain?: string) {
+async function getPost(slug: string, tenantId?: string) {
   const post = await db.blogPost.findFirst({
     where: {
       slug,
       status: "PUBLISHED",
-      ...(tenantSubdomain && {
-        tenant: { subdomain: tenantSubdomain },
-      }),
+      ...(tenantId && { tenantId }),
     },
     include: {
       author: { select: { id: true, name: true } },
@@ -44,7 +45,13 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const post = await getPost(slug);
+  const tenant = await resolveTenant();
+
+  if (!tenant) {
+    return { title: "文章不存在" };
+  }
+
+  const post = await getPost(slug, tenant.tenantId);
 
   if (!post) {
     return {
@@ -71,11 +78,23 @@ export default async function BlogPostPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const post = await getPost(slug);
+  const tenant = await resolveTenant();
+
+  if (!tenant) {
+    notFound();
+  }
+
+  const post = await getPost(slug, tenant.tenantId);
 
   if (!post) {
     notFound();
   }
+
+  // 從 request headers 取得 tenant-aware origin（用於分享 URL）
+  const headersList = await headers();
+  const proto = headersList.get("x-forwarded-proto") || "https";
+  const host = headersList.get("x-forwarded-host") || headersList.get("host") || "";
+  const siteUrl = host ? `${proto}://${host}` : process.env.NEXT_PUBLIC_BASE_URL || "";
 
   return (
     <article className="container max-w-4xl py-8">
@@ -142,7 +161,7 @@ export default async function BlogPostPage({
         <div className="flex gap-4">
           <a
             href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
-              `${process.env.NEXT_PUBLIC_BASE_URL || ""}/blog/${post.slug}`
+              `${siteUrl}/blog/${post.slug}`
             )}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -152,7 +171,7 @@ export default async function BlogPostPage({
           </a>
           <a
             href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(
-              `${process.env.NEXT_PUBLIC_BASE_URL || ""}/blog/${post.slug}`
+              `${siteUrl}/blog/${post.slug}`
             )}&text=${encodeURIComponent(post.title)}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -162,7 +181,7 @@ export default async function BlogPostPage({
           </a>
           <a
             href={`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(
-              `${process.env.NEXT_PUBLIC_BASE_URL || ""}/blog/${post.slug}`
+              `${siteUrl}/blog/${post.slug}`
             )}`}
             target="_blank"
             rel="noopener noreferrer"

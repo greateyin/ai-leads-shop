@@ -1,44 +1,39 @@
-import { headers } from "next/headers";
 import { db } from "@/lib/db";
+import { resolveTenant } from "@/lib/tenant/resolve-tenant";
 import { TrackingScripts } from "@/components/tracking/tracking-scripts";
+import { UtmPersistence } from "@/components/tracking/utm-persistence";
 import { PublicHeader } from "@/components/layout/public-header";
 
 /**
- * 取得租戶追蹤設定
+ * 依 tenantId 取得追蹤設定
  */
-async function getTrackingSettings(tenantSubdomain?: string) {
-  if (!tenantSubdomain) return null;
-
-  const tenant = await db.tenant.findFirst({
-    where: { subdomain: tenantSubdomain },
-    include: { trackingSettings: true },
+async function getTrackingSettings(tenantId: string) {
+  const settings = await db.trackingSettings.findUnique({
+    where: { tenantId },
   });
-
-  return tenant?.trackingSettings;
+  return settings;
 }
 
 /**
  * 公開頁面 Layout
- * 動態載入租戶追蹤設定
+ * 使用共用 tenant resolver 解析當前租戶，注入追蹤腳本
  */
 export default async function PublicLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // 從 headers 取得 host 解析租戶 subdomain
-  const headersList = await headers();
-  const host = headersList.get("host") || "";
-  const subdomain = host.split(".")[0];
+  // 使用共用 resolver 解析 tenant（支援 custom domain / subdomain / localhost）
+  const tenant = await resolveTenant();
 
   // 取得租戶追蹤設定
-  const trackingSettings = await getTrackingSettings(
-    subdomain !== "localhost" && subdomain !== "www" ? subdomain : undefined
-  );
+  const trackingSettings = tenant
+    ? await getTrackingSettings(tenant.tenantId)
+    : null;
 
   return (
     <>
-      {/* 動態注入追蹤腳本 */}
+      {/* 動態注入追蹤腳本（依租戶設定） */}
       {trackingSettings && (
         <TrackingScripts
           ga4MeasurementId={trackingSettings.ga4MeasurementId}
@@ -48,6 +43,9 @@ export default async function PublicLayout({
           lineTagId={trackingSettings.lineTagId}
         />
       )}
+
+      {/* UTM 參數持久化（首次進站自動擷取） */}
+      <UtmPersistence />
 
       {/* Header */}
       <PublicHeader />

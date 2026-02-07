@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { resolveTenantFromRequest } from "@/lib/tenant/resolve-tenant";
 
 /**
  * GET /api/products/[id]/public
  * 取得單一商品詳情 (公開端點，不需要登入)
+ * 已加入 tenant 隔離：僅回傳當前租戶的商品
  */
 export async function GET(
     request: NextRequest,
@@ -12,11 +14,16 @@ export async function GET(
     try {
         const { id } = await params;
 
+        // Tenant 隔離：從 host 解析租戶
+        const tenant = await resolveTenantFromRequest(request);
+
         const product = await db.product.findFirst({
             where: {
                 id,
-                status: "PUBLISHED", // Only published products
+                status: "PUBLISHED",
                 deletedAt: null,
+                // Tenant 隔離：不允許跨租戶讀取商品
+                ...(tenant && { tenantId: tenant.tenantId }),
             },
             include: {
                 shop: {

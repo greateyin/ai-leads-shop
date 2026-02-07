@@ -31,7 +31,7 @@ const createProductSchema = z.object({
     url: z.string().url(),
     altText: z.string().optional(),
     sortOrder: z.number().int().optional(),
-  })).optional(),
+  })).max(12, "單一商品最多 12 張媒體附件").optional(),
 });
 
 /**

@@ -74,6 +74,7 @@ export function TrackingScripts({
                 function gtag(){dataLayer.push(arguments);}
                 gtag('js', new Date());
                 gtag('config', '${ga4MeasurementId}');
+                window.GA_MEASUREMENT_ID = '${ga4MeasurementId}';
               `,
             }}
           />
@@ -147,7 +148,19 @@ export function TrackingScripts({
 }
 
 /**
+ * 追蹤事件用的商品項目介面
+ */
+interface TrackingItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  category?: string;
+}
+
+/**
  * 追蹤事件輔助函式
+ * 支援 GA4、Meta Pixel、TikTok Pixel、LINE Tag 事件推送
  */
 export const trackingEvents = {
   /**
@@ -171,6 +184,111 @@ export const trackingEvents = {
   },
 
   /**
+   * 追蹤商品列表曝光 (GA4: view_item_list)
+   */
+  viewItemList: (listName: string, items: TrackingItem[]) => {
+    // GA4
+    if (typeof window !== "undefined" && window.gtag) {
+      window.gtag("event", "view_item_list", {
+        item_list_name: listName,
+        items: items.map((item, index) => ({
+          item_id: item.id,
+          item_name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          index,
+          item_category: item.category,
+        })),
+      });
+    }
+    // Meta Pixel - ViewContent for list
+    if (typeof window !== "undefined" && window.fbq) {
+      window.fbq("track", "ViewContent", {
+        content_type: "product_group",
+        content_ids: items.map((i) => i.id),
+        contents: items.map((i) => ({ id: i.id, quantity: i.quantity })),
+      });
+    }
+    // TikTok
+    if (typeof window !== "undefined" && window.ttq) {
+      window.ttq.track("ViewContent", {
+        content_type: "product_group",
+        content_id: items.map((i) => i.id).join(","),
+        quantity: items.length,
+      });
+    }
+  },
+
+  /**
+   * 追蹤商品列表中的點擊 (GA4: select_item)
+   */
+  selectItem: (listName: string, item: TrackingItem, index: number) => {
+    // GA4
+    if (typeof window !== "undefined" && window.gtag) {
+      window.gtag("event", "select_item", {
+        item_list_name: listName,
+        items: [
+          {
+            item_id: item.id,
+            item_name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            index,
+            item_category: item.category,
+          },
+        ],
+      });
+    }
+  },
+
+  /**
+   * 追蹤商品詳情頁瀏覽 (GA4: view_item)
+   */
+  viewItem: (product: TrackingItem) => {
+    // GA4
+    if (typeof window !== "undefined" && window.gtag) {
+      window.gtag("event", "view_item", {
+        currency: "TWD",
+        value: product.price,
+        items: [
+          {
+            item_id: product.id,
+            item_name: product.name,
+            price: product.price,
+            quantity: 1,
+            item_category: product.category,
+          },
+        ],
+      });
+    }
+    // Meta Pixel
+    if (typeof window !== "undefined" && window.fbq) {
+      window.fbq("track", "ViewContent", {
+        content_ids: [product.id],
+        content_name: product.name,
+        content_type: "product",
+        value: product.price,
+        currency: "TWD",
+      });
+    }
+    // TikTok
+    if (typeof window !== "undefined" && window.ttq) {
+      window.ttq.track("ViewContent", {
+        content_id: product.id,
+        content_name: product.name,
+        content_type: "product",
+        price: product.price,
+        value: product.price,
+        currency: "TWD",
+      });
+    }
+    // LINE Tag
+    if (typeof window !== "undefined" && window._lt) {
+      window._lt("send", "cv", { type: "ViewContent" });
+    }
+  },
+
+  /**
    * 追蹤加入購物車
    */
   addToCart: (product: {
@@ -178,6 +296,7 @@ export const trackingEvents = {
     name: string;
     price: number;
     quantity: number;
+    category?: string;
   }) => {
     // GA4
     if (typeof window !== "undefined" && window.gtag) {
@@ -190,6 +309,7 @@ export const trackingEvents = {
             item_name: product.name,
             price: product.price,
             quantity: product.quantity,
+            item_category: product.category,
           },
         ],
       });
@@ -223,7 +343,7 @@ export const trackingEvents = {
   purchase: (order: {
     id: string;
     total: number;
-    items: Array<{ id: string; name: string; price: number; quantity: number }>;
+    items: Array<{ id: string; name: string; price: number; quantity: number; category?: string }>;
   }) => {
     // GA4
     if (typeof window !== "undefined" && window.gtag) {
@@ -236,6 +356,7 @@ export const trackingEvents = {
           item_name: item.name,
           price: item.price,
           quantity: item.quantity,
+          item_category: item.category,
         })),
       });
     }
@@ -257,6 +378,56 @@ export const trackingEvents = {
         value: order.total,
         currency: "TWD",
       });
+    }
+    // LINE Tag
+    if (typeof window !== "undefined" && window._lt) {
+      window._lt("send", "cv", { type: "Purchase" });
+    }
+  },
+
+  /**
+   * 追蹤開始結帳 (GA4: begin_checkout)
+   */
+  beginCheckout: (cart: {
+    total: number;
+    items: Array<{ id: string; name: string; price: number; quantity: number; category?: string }>;
+  }) => {
+    // GA4
+    if (typeof window !== "undefined" && window.gtag) {
+      window.gtag("event", "begin_checkout", {
+        currency: "TWD",
+        value: cart.total,
+        items: cart.items.map((item) => ({
+          item_id: item.id,
+          item_name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          item_category: item.category,
+        })),
+      });
+    }
+    // Meta Pixel
+    if (typeof window !== "undefined" && window.fbq) {
+      window.fbq("track", "InitiateCheckout", {
+        content_ids: cart.items.map((i) => i.id),
+        content_type: "product",
+        value: cart.total,
+        currency: "TWD",
+        num_items: cart.items.length,
+      });
+    }
+    // TikTok
+    if (typeof window !== "undefined" && window.ttq) {
+      window.ttq.track("InitiateCheckout", {
+        content_id: cart.items.map((i) => i.id).join(","),
+        quantity: cart.items.length,
+        value: cart.total,
+        currency: "TWD",
+      });
+    }
+    // LINE Tag
+    if (typeof window !== "undefined" && window._lt) {
+      window._lt("send", "cv", { type: "InitiateCheckout" });
     }
   },
 };

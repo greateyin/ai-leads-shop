@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckoutForm, CheckoutFormData } from "@/components/checkout/CheckoutForm";
 import { formatCurrency } from "@/lib/utils";
 import { Loader2, LogIn, ShoppingBag, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { trackingEvents } from "@/components/tracking/tracking-scripts";
+import { getSavedUtm } from "@/components/tracking/utm-persistence";
 
 interface CartItem {
     productId: string;
@@ -49,6 +51,10 @@ export default function CheckoutPage() {
         isGuestOrder: boolean;
         guestEmail?: string;
     } | null>(null);
+    /** 防止 begin_checkout 重複觸發 */
+    const hasTrackedBeginCheckout = useRef(false);
+    /** 防止 purchase 重複觸發（頁面重整） */
+    const hasTrackedPurchase = useRef(false);
 
     // Load Cart & Shop Info
     useEffect(() => {
@@ -151,6 +157,20 @@ export default function CheckoutPage() {
                     setError("購物車是空的，請先加入商品");
                 } else {
                     setCart(cartData);
+
+                    // 追蹤 begin_checkout 事件（僅觸發一次）
+                    if (!hasTrackedBeginCheckout.current) {
+                        hasTrackedBeginCheckout.current = true;
+                        trackingEvents.beginCheckout({
+                            total: cartData.total,
+                            items: cartData.items.map((item) => ({
+                                id: item.productId,
+                                name: item.name,
+                                price: item.price,
+                                quantity: item.quantity,
+                            })),
+                        });
+                    }
                 }
 
             } catch (err) {
@@ -191,6 +211,16 @@ export default function CheckoutPage() {
                 }
             }
 
+            // 附加 UTM 行銷歸因資料（若有）
+            const utmData = getSavedUtm();
+            if (utmData) {
+                orderPayload.utmSource = utmData.utm_source;
+                orderPayload.utmMedium = utmData.utm_medium;
+                orderPayload.utmCampaign = utmData.utm_campaign;
+                orderPayload.utmTerm = utmData.utm_term;
+                orderPayload.utmContent = utmData.utm_content;
+            }
+
             // Create order directly via POST /api/orders
             const res = await fetch("/api/orders", {
                 method: "POST",
@@ -208,6 +238,21 @@ export default function CheckoutPage() {
                 clearGuestCart();
             } else {
                 await fetch("/api/carts", { method: "DELETE" });
+            }
+
+            // 追蹤 purchase 事件（去重：僅觸發一次）
+            if (!hasTrackedPurchase.current && cart) {
+                hasTrackedPurchase.current = true;
+                trackingEvents.purchase({
+                    id: json.data.orderNo,
+                    total: cart.total,
+                    items: cart.items.map((item) => ({
+                        id: item.productId,
+                        name: item.name,
+                        price: item.price,
+                        quantity: item.quantity,
+                    })),
+                });
             }
 
             // Show success state

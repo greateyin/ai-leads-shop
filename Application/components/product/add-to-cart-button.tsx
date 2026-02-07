@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { trackingEvents } from "@/components/tracking/tracking-scripts";
 
 interface AddToCartButtonProps {
     productId: string;
@@ -61,6 +62,14 @@ export function AddToCartButton({
         }
 
         localStorage.setItem(cartKey, JSON.stringify(cart));
+
+        // 追蹤 add_to_cart 事件
+        trackingEvents.addToCart({
+            id: productId,
+            name: productName,
+            price,
+            quantity,
+        });
 
         // 顯示成功訊息
         setIsAdded(true);
