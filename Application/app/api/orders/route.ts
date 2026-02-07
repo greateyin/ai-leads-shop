@@ -6,6 +6,7 @@ import { generateOrderNo } from "@/lib/utils";
 import { generateId } from "@/lib/id";
 import { sendGuestOrderConfirmationEmail } from "@/lib/email";
 import { withStaffAuth, type AuthenticatedSession } from "@/lib/api/with-auth";
+import { resolveTenantFromRequest } from "@/lib/tenant/resolve-tenant";
 
 /**
  * 訂單建立 Schema
@@ -38,6 +39,12 @@ const createOrderSchema = z.object({
   paymentProvider: z.enum(["ECPAY", "NEWEBPAY", "STRIPE"]).optional(),
   // Shop ID for guest checkout (since we don't have session.user.tenantId)
   shopSlug: z.string().optional(),
+  // UTM 行銷歸因欄位（由前端 checkout 附加）
+  utmSource: z.string().optional(),
+  utmMedium: z.string().optional(),
+  utmCampaign: z.string().optional(),
+  utmTerm: z.string().optional(),
+  utmContent: z.string().optional(),
 });
 
 /**
@@ -121,6 +128,11 @@ export async function POST(request: NextRequest) {
       guestPhone,
       guestName,
       shopSlug,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      utmTerm,
+      utmContent,
     } = validation.data;
 
     // Determine if this is a guest checkout or authenticated checkout
@@ -147,22 +159,33 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Find shop by slug or get the first available public shop
+      // [安全] 從 request host 解析租戶，不信任 client 傳入的 shopSlug/productId
+      const tenant = await resolveTenantFromRequest(request);
+
+      if (!tenant) {
+        // fail-closed：無法辨識租戶時拒絕下單
+        return NextResponse.json(
+          {
+            success: false,
+            error: { code: "FORBIDDEN", message: "無法辨識商店來源" },
+          },
+          { status: 403 }
+        );
+      }
+
+      tenantId = tenant.tenantId;
+
+      // 以 host 解析的 tenantId 查詢商店（shopSlug 僅作為同租戶內的次要篩選）
       if (shopSlug) {
         shop = await db.shop.findFirst({
-          where: { slug: shopSlug },
+          where: { slug: shopSlug, tenantId },
           include: { tenant: true },
         });
       } else {
-        // Try to get shop from product's tenant
-        const firstProductId = items[0]?.productId;
-        if (firstProductId) {
-          const product = await db.product.findFirst({
-            where: { id: firstProductId },
-            include: { shop: { include: { tenant: true } } },
-          });
-          shop = product?.shop;
-        }
+        shop = await db.shop.findFirst({
+          where: { id: tenant.shopId },
+          include: { tenant: true },
+        });
       }
 
       if (!shop) {
@@ -174,8 +197,6 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         );
       }
-
-      tenantId = shop.tenantId;
     } else {
       // Authenticated checkout
       tenantId = session!.user.tenantId;
@@ -256,14 +277,24 @@ export async function POST(request: NextRequest) {
         orderNo: generateOrderNo(),
         totalAmount,
         currency: shop.currency,
-        // Store guest info in metadata
-        ...(isGuestCheckout && {
-          metadata: {
+        // Store guest info + UTM 歸因資料 in metadata
+        metadata: {
+          ...(isGuestCheckout && {
             guestEmail,
             guestPhone: guestPhone || null,
             guestName: guestName || shippingAddress?.contactName || null,
-          },
-        }),
+          }),
+          // UTM 行銷歸因（有任一欄位就寫入）
+          ...(utmSource || utmMedium || utmCampaign || utmTerm || utmContent
+            ? {
+                utmSource: utmSource || null,
+                utmMedium: utmMedium || null,
+                utmCampaign: utmCampaign || null,
+                utmTerm: utmTerm || null,
+                utmContent: utmContent || null,
+              }
+            : {}),
+        },
         items: { create: orderItems },
         ...(shippingAddress && {
           addresses: {

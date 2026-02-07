@@ -231,21 +231,6 @@ export default async function ProductPage({
               />
             </div>
 
-            {/* 手機版也顯示規格選擇（不含按鈕，按鈕在 sticky CTA） */}
-            <div className="md:hidden">
-              <AddToCartButton
-                productId={product.id}
-                productName={product.name}
-                price={price}
-                stock={product.stock}
-                variants={product.variants.map((v) => ({
-                  id: v.id,
-                  name: v.name,
-                  sku: v.sku,
-                  price: v.price ? Number(v.price) : null,
-                }))}
-              />
-            </div>
 
             {/* 信任標章 */}
             <TrustBadges />
@@ -256,7 +241,7 @@ export default async function ProductPage({
               <div className="flex gap-2">
                 <a
                   href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
-                    `${process.env.NEXT_PUBLIC_BASE_URL || ""}/products/${product.slug}`
+                    `${siteUrl}/products/${product.slug}`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -267,7 +252,7 @@ export default async function ProductPage({
                 </a>
                 <a
                   href={`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(
-                    `${process.env.NEXT_PUBLIC_BASE_URL || ""}/products/${product.slug}`
+                    `${siteUrl}/products/${product.slug}`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -302,6 +287,7 @@ export default async function ProductPage({
         <RelatedProducts
           currentProductId={product.id}
           categoryIds={categoryIds}
+          tenantId={tenant.tenantId}
           limit={4}
         />
       </div>
@@ -312,6 +298,12 @@ export default async function ProductPage({
         productName={product.name}
         price={price}
         stock={product.stock}
+        variants={product.variants.map((v) => ({
+          id: v.id,
+          name: v.name,
+          sku: v.sku,
+          price: v.price ? Number(v.price) : null,
+        }))}
       />
     </div>
   );

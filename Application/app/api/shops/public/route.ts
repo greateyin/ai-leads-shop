@@ -40,8 +40,9 @@ export async function GET(request: NextRequest) {
                 where: { slug, tenantId: tenant.tenantId },
                 select: SHOP_PUBLIC_SELECT,
             });
-        } else if (slug) {
-            // 無法解析租戶時，僅以 slug 查詢（localhost 開發場景）
+        } else if (slug && !tenant && process.env.NODE_ENV !== "production") {
+            // [安全] 僅限開發環境：tenant 解析失敗時以 slug 查詢
+            // 在 production 中 fail-closed，避免跨租戶商店枚舉
             shop = await db.shop.findUnique({
                 where: { slug },
                 select: SHOP_PUBLIC_SELECT,

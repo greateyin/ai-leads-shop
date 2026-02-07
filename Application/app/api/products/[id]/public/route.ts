@@ -17,13 +17,23 @@ export async function GET(
         // Tenant 隔離：從 host 解析租戶
         const tenant = await resolveTenantFromRequest(request);
 
+        // [安全] fail-closed：tenant 解析失敗時不查全庫，防止跨租戶讀取
+        if (!tenant) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: { code: "NOT_FOUND", message: "找不到商品" },
+                },
+                { status: 404 }
+            );
+        }
+
         const product = await db.product.findFirst({
             where: {
                 id,
                 status: "PUBLISHED",
                 deletedAt: null,
-                // Tenant 隔離：不允許跨租戶讀取商品
-                ...(tenant && { tenantId: tenant.tenantId }),
+                tenantId: tenant.tenantId,
             },
             include: {
                 shop: {

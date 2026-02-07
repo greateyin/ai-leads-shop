@@ -9,6 +9,8 @@ interface RelatedProductsProps {
   currentProductId: string;
   /** 目前商品的分類 ID 列表 */
   categoryIds: string[];
+  /** 租戶 ID（確保不跨租戶推薦） */
+  tenantId: string;
   /** 最多顯示幾個（預設 4） */
   limit?: number;
 }
@@ -21,12 +23,14 @@ interface RelatedProductsProps {
 export async function RelatedProducts({
   currentProductId,
   categoryIds,
+  tenantId,
   limit = 4,
 }: RelatedProductsProps) {
-  // 查詢同分類商品
+  // 查詢同分類商品（限定當前租戶，防止跨租戶洩漏）
   const relatedProducts = await db.product.findMany({
     where: {
       id: { not: currentProductId },
+      tenantId,
       status: "PUBLISHED",
       deletedAt: null,
       ...(categoryIds.length > 0 && {
@@ -55,6 +59,7 @@ export async function RelatedProducts({
     const moreProducts = await db.product.findMany({
       where: {
         id: { notIn: existingIds },
+        tenantId,
         status: "PUBLISHED",
         deletedAt: null,
       },
