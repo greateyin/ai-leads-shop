@@ -7,6 +7,7 @@ import { generateId } from "@/lib/id";
 import { sendGuestOrderConfirmationEmail } from "@/lib/email";
 import { withStaffAuth, type AuthenticatedSession } from "@/lib/api/with-auth";
 import { resolveTenantFromRequest } from "@/lib/tenant/resolve-tenant";
+import { getDefaultProvider } from "@/lib/payment";
 
 /**
  * 訂單建立 Schema
@@ -16,7 +17,7 @@ const createOrderSchema = z.object({
   items: z.array(
     z.object({
       productId: z.string(),
-      variantId: z.string().optional(),
+      variantId: z.string().nullable().optional(),
       quantity: z.number().int().min(1),
     })
   ),
@@ -109,9 +110,20 @@ export async function POST(request: NextRequest) {
   try {
     const { session } = await authWithTenant({ requireTenant: false });
     const body = await request.json();
+
+    // 空字串轉 undefined：前端可能送 "" 給 optional 欄位，
+    // 但 zod .email().optional() 不接受空字串
+    if (body.guestEmail === "") body.guestEmail = undefined;
+    if (body.guestPhone === "") body.guestPhone = undefined;
+    if (body.guestName === "") body.guestName = undefined;
+
     const validation = createOrderSchema.safeParse(body);
 
     if (!validation.success) {
+      console.warn(
+        "[Orders] Schema validation failed:",
+        JSON.stringify(validation.error.errors, null, 2)
+      );
       return NextResponse.json(
         {
           success: false,
@@ -138,6 +150,9 @@ export async function POST(request: NextRequest) {
     // Determine if this is a guest checkout or authenticated checkout
     // [安全] 判斷是否為訪客結帳：無 session 或無 tenantId
     const isGuestCheckout = !session?.user?.tenantId;
+    console.log(
+      `[Orders] POST: isGuest=${isGuestCheckout}, hasSession=${!!session}, tenantId=${session?.user?.tenantId || "(none)"}`
+    );
 
     // For guest checkout, we need either shopSlug or the shop context
     let shop;
@@ -341,12 +356,42 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // 檢查租戶是否有設定金流供應商 → 決定是否需要付款
+    let paymentRequired = false;
+    let paymentId: string | undefined;
+    try {
+      const provider = await getDefaultProvider(tenantId);
+      if (provider) {
+        // 建立付款記錄（狀態 INITIATED），等用戶進入付款頁再產生金流交易
+        const payment = await db.payment.create({
+          data: {
+            id: generateId(),
+            tenantId,
+            orderId: order.id,
+            providerId: provider.id,
+            provider: provider.type,
+            amount: totalAmount,
+            currency: shop.currency,
+            status: "INITIATED",
+          },
+        });
+        paymentRequired = true;
+        paymentId = payment.id;
+        console.log(`[Orders] Payment record created: ${payment.id}, provider: ${provider.type}`);
+      }
+    } catch (paymentErr) {
+      // 金流初始化失敗不影響訂單建立，僅記錄
+      console.error("[Orders] 建立付款記錄失敗（訂單已建立）:", paymentErr);
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         ...order,
         isGuestOrder: isGuestCheckout,
         guestEmail: isGuestCheckout ? guestEmail : undefined,
+        paymentRequired,
+        paymentId,
       },
       message: isGuestCheckout
         ? "訂單建立成功，請查收確認郵件"

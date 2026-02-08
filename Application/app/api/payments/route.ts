@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
             merchantId: providerConfig.merchantId as string,
             hashKey: providerConfig.hashKey as string,
             hashIV: providerConfig.hashIV as string,
-            isProduction: providerConfig.isProduction === true || providerConfig.isProduction === "true",
+            isProduction: String(providerConfig.isProduction) === "true",
           },
           {
             orderId: payment.id,
@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
             merchantId: providerConfig.merchantId as string,
             hashKey: providerConfig.hashKey as string,
             hashIV: providerConfig.hashIV as string,
-            isProduction: providerConfig.isProduction === true || providerConfig.isProduction === "true",
+            isProduction: String(providerConfig.isProduction) === "true",
           },
           {
             orderId: payment.id,

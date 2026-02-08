@@ -101,6 +101,60 @@ export async function createTransaction(
 }
 
 /**
+ * 建立 NewebPay 結構化表單資料（供前端 React 安全渲染）
+ * @param config - NewebPay 配置
+ * @param order - 訂單資訊
+ * @returns actionUrl、hidden fields、交易編號
+ */
+export async function createFormData(
+  config: NewebPayConfig,
+  order: OrderInfo
+): Promise<{
+  actionUrl: string;
+  fields: Record<string, string>;
+  merchantOrderNo: string;
+}> {
+  const merchantOrderNo = `${order.orderId}${Date.now().toString(36)}`;
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+
+  const tradeInfo: TradeInfo = {
+    MerchantID: config.merchantId,
+    RespondType: "JSON",
+    TimeStamp: timestamp,
+    Version: "2.0",
+    MerchantOrderNo: merchantOrderNo,
+    Amt: order.amount,
+    ItemDesc: order.itemDesc,
+    Email: order.email,
+    ReturnURL: order.returnUrl,
+    NotifyURL: order.notifyUrl,
+    ...(order.clientBackUrl && { ClientBackURL: order.clientBackUrl }),
+  };
+
+  const tradeInfoEncrypted = aesEncrypt(
+    JSON.stringify(tradeInfo),
+    config.hashKey,
+    config.hashIV
+  );
+  const tradeSha = sha256Hash(tradeInfoEncrypted, config.hashKey, config.hashIV);
+
+  const actionUrl = config.isProduction
+    ? "https://core.newebpay.com/MPG/mpg_gateway"
+    : "https://ccore.newebpay.com/MPG/mpg_gateway";
+
+  return {
+    actionUrl,
+    fields: {
+      MerchantID: config.merchantId,
+      TradeInfo: tradeInfoEncrypted,
+      TradeSha: tradeSha,
+      Version: "2.0",
+    },
+    merchantOrderNo,
+  };
+}
+
+/**
  * 驗證 NewebPay 回調通知
  * @param config - NewebPay 配置
  * @param payload - 回調資料
