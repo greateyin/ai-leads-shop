@@ -8,9 +8,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { formatUcpError } from "@/lib/ucp/middleware";
+import { ucpGuard } from "@/lib/ucp/guard";
+import { withDeprecationHeaders } from "@/lib/ucp/deprecation";
 import type { UcpProfile } from "@/lib/ucp/types";
 
 export async function GET(request: NextRequest) {
+    const disabled = ucpGuard();
+    if (disabled) return disabled;
+
     try {
         const { searchParams } = new URL(request.url);
         const merchantId = searchParams.get("merchantId");
@@ -83,7 +88,10 @@ export async function GET(request: NextRequest) {
             },
         };
 
-        return NextResponse.json(profile);
+        return withDeprecationHeaders(
+            NextResponse.json(profile),
+            "/.well-known/ucp/profile.json"
+        );
     } catch (error) {
         console.error("[UCP Profile] Error:", error);
         return NextResponse.json(

@@ -11,6 +11,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { generateId } from "@/lib/id";
 import { verifyUcpRequest, formatUcpError } from "@/lib/ucp/middleware";
+import { ucpGuard } from "@/lib/ucp/guard";
+import { withDeprecationHeaders } from "@/lib/ucp/deprecation";
 import { getStripeConfigForTenant, createPaymentIntent } from "@/lib/payment/stripe";
 import type { UcpOrder, UcpCheckoutSession, UcpMoney } from "@/lib/ucp/types";
 
@@ -45,6 +47,9 @@ function toUcpMoney(amount: number, currency: string): UcpMoney {
 // ===========================================
 
 export async function POST(request: NextRequest) {
+    const disabled = ucpGuard();
+    if (disabled) return disabled;
+
     try {
         const body = await request.json();
         const validation = createOrderSchema.safeParse(body);
@@ -298,7 +303,10 @@ export async function POST(request: NextRequest) {
             updatedAt: order.updatedAt.toISOString(),
         };
 
-        return NextResponse.json(ucpOrder, { status: 201 });
+        return withDeprecationHeaders(
+            NextResponse.json(ucpOrder, { status: 201 }),
+            "/api/ucp/v1/checkout-sessions/{id}/complete"
+        );
     } catch (error) {
         console.error("[UCP Orders] Error:", error);
 
@@ -323,6 +331,9 @@ export async function POST(request: NextRequest) {
 // ===========================================
 
 export async function GET(request: NextRequest) {
+    const disabled = ucpGuard();
+    if (disabled) return disabled;
+
     try {
         const { searchParams } = new URL(request.url);
         const orderId = searchParams.get("orderId");
@@ -438,7 +449,10 @@ export async function GET(request: NextRequest) {
             updatedAt: order.updatedAt.toISOString(),
         };
 
-        return NextResponse.json(ucpOrder);
+        return withDeprecationHeaders(
+            NextResponse.json(ucpOrder),
+            "/api/ucp/v1/orders/{orderId}"
+        );
     } catch (error) {
         console.error("[UCP Orders GET] Error:", error);
         return NextResponse.json(

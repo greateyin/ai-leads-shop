@@ -523,7 +523,7 @@ model UcpCheckoutSession {
   paymentHandlers Json                // 回傳給平台的付款處理器
   buyerEmail      String?
   metadata        Json?               // 額外的元資料
-  orderId         String?             @db.Uuid
+  orderId         String?             @unique @db.Uuid // 唯一鍵：防止重複建單
   expiresAt       DateTime
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt

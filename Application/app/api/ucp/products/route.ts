@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyUcpPublicRequest, formatUcpError } from "@/lib/ucp/middleware";
+import { ucpGuard } from "@/lib/ucp/guard";
 import type { UcpOffer, UcpMoney } from "@/lib/ucp/types";
 
 /**
@@ -54,6 +55,9 @@ function toUcpOffer(
 }
 
 export async function GET(request: NextRequest) {
+    const disabled = ucpGuard();
+    if (disabled) return disabled;
+
     try {
         const { searchParams } = new URL(request.url);
         const merchantId = searchParams.get("merchantId");

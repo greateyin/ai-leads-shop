@@ -11,6 +11,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { generateId } from "@/lib/id";
 import { verifyUcpRequest, formatUcpError } from "@/lib/ucp/middleware";
+import { ucpGuard } from "@/lib/ucp/guard";
+import { withDeprecationHeaders } from "@/lib/ucp/deprecation";
 import type {
     UcpCheckoutSession,
     UcpPaymentHandler,
@@ -132,6 +134,9 @@ async function getPaymentHandlers(
 // ===========================================
 
 export async function POST(request: NextRequest) {
+    const disabled = ucpGuard();
+    if (disabled) return disabled;
+
     try {
         const body = await request.json();
         const validation = createCheckoutSchema.safeParse(body);
@@ -271,7 +276,10 @@ export async function POST(request: NextRequest) {
             },
         });
 
-        return NextResponse.json(session, { status: 201 });
+        return withDeprecationHeaders(
+            NextResponse.json(session, { status: 201 }),
+            "/api/ucp/v1/checkout-sessions"
+        );
     } catch (error) {
         console.error("[UCP Checkout] Error:", error);
         return NextResponse.json(
@@ -286,6 +294,9 @@ export async function POST(request: NextRequest) {
 // ===========================================
 
 export async function GET(request: NextRequest) {
+    const disabled = ucpGuard();
+    if (disabled) return disabled;
+
     try {
         // [安全] 驗證 UCP 請求（API Key + 商家啟用狀態），與 POST 一致
         const authResult = await verifyUcpRequest(request);
@@ -345,7 +356,10 @@ export async function GET(request: NextRequest) {
             orderId: dbSession.orderId || undefined,
         };
 
-        return NextResponse.json(session);
+        return withDeprecationHeaders(
+            NextResponse.json(session),
+            "/api/ucp/v1/checkout-sessions"
+        );
     } catch (error) {
         console.error("[UCP Checkout GET] Error:", error);
         return NextResponse.json(

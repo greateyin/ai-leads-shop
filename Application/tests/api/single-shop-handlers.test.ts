@@ -105,16 +105,14 @@ const EXISTING_SHOP = {
 /** Build a NextRequest from a URL + JSON body */
 function buildRequest(path: string, body?: Record<string, unknown>): NextRequest {
     const url = `http://shop-a.example.com${path}`;
-    const init: RequestInit = {
+    const init = {
         method: body ? "POST" : "GET",
         headers: {
             "Content-Type": "application/json",
             host: "shop-a.example.com",
         },
+        body: body ? JSON.stringify(body) : undefined,
     };
-    if (body) {
-        init.body = JSON.stringify(body);
-    }
     return new NextRequest(url, init);
 }
 

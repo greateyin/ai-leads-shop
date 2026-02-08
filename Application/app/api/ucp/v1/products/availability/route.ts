@@ -1,8 +1,8 @@
 /**
- * UCP Availability API
- * POST /api/ucp/availability
- * 
- * 即時查詢商品庫存和價格，用於結帳前驗證
+ * Google Merchant Shopping APIs v1 — Product Availability
+ * POST /api/ucp/v1/products/availability — 查詢商品庫存
+ *
+ * @see docs/02_System_Analysis/06_UCP_Google_Alignment_Plan.md §1.1 R7
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -10,16 +10,31 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { verifyUcpPublicRequest, formatUcpError } from "@/lib/ucp/middleware";
 import { ucpGuard } from "@/lib/ucp/guard";
+import { toGoogleAvailabilityResponse } from "@/lib/ucp/adapters/google";
 import type { UcpAvailabilityResponse, UcpMoney } from "@/lib/ucp/types";
+
+// ===========================================
+// Google v1 Schema
+// ===========================================
 
 const availabilitySchema = z.object({
     merchantId: z.string().uuid(),
-    offers: z.array(z.object({
-        id: z.string().uuid(),
+    products: z.array(z.object({
+        offerId: z.string().uuid(),
         quantity: z.number().int().min(1).optional().default(1),
-    })).min(1).max(50), // 限制單次最多查詢 50 個商品
+    })).min(1).max(50),
+    shippingAddress: z.object({
+        name: z.string().optional(),
+        addressLines: z.array(z.string()).min(1),
+        locality: z.string(),
+        administrativeArea: z.string().optional(),
+        postalCode: z.string(),
+        regionCode: z.string().default("TW"),
+        phoneNumber: z.string().optional(),
+    }).optional(),
 });
 
+/** 將價格轉換為 UCP minor units */
 function toUcpMoney(amount: number | { toNumber(): number }, currency: string): UcpMoney {
     const value = typeof amount === "number" ? amount : amount.toNumber();
     return {
@@ -28,6 +43,10 @@ function toUcpMoney(amount: number | { toNumber(): number }, currency: string): 
     };
 }
 
+/**
+ * POST /api/ucp/v1/products/availability
+ * @param request - Google v1 格式的庫存查詢請求
+ */
 export async function POST(request: NextRequest) {
     const disabled = ucpGuard();
     if (disabled) return disabled;
@@ -45,7 +64,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { merchantId, offers } = validation.data;
+        const { merchantId, products: requestedProducts } = validation.data;
 
         // 驗證商家 UCP 設定
         const authResult = await verifyUcpPublicRequest(merchantId);
@@ -56,7 +75,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 取得商店資訊（含幣別）
+        // 取得商店幣別
         const shop = await db.shop.findFirst({
             where: { id: merchantId },
             select: { currency: true },
@@ -70,8 +89,8 @@ export async function POST(request: NextRequest) {
         }
 
         // 批次查詢所有商品
-        const productIds = offers.map((o) => o.id);
-        const products = await db.product.findMany({
+        const productIds = requestedProducts.map((p) => p.offerId);
+        const dbProducts = await db.product.findMany({
             where: {
                 id: { in: productIds },
                 shopId: merchantId,
@@ -85,17 +104,16 @@ export async function POST(request: NextRequest) {
             },
         });
 
-        // 建立 ID -> 商品 的映射
-        const productMap = new Map(products.map((p) => [p.id, p]));
+        const productMap = new Map(dbProducts.map((p) => [p.id, p]));
 
-        // 組裝回應
-        const response: UcpAvailabilityResponse = {
-            offers: offers.map((offerRequest) => {
-                const product = productMap.get(offerRequest.id);
+        // 組裝內部格式回應
+        const internalResponse: UcpAvailabilityResponse = {
+            offers: requestedProducts.map((req) => {
+                const product = productMap.get(req.offerId);
 
                 if (!product) {
                     return {
-                        id: offerRequest.id,
+                        id: req.offerId,
                         availability: "OUT_OF_STOCK" as const,
                         price: toUcpMoney(0, shop.currency),
                         quantity: 0,
@@ -103,11 +121,11 @@ export async function POST(request: NextRequest) {
                     };
                 }
 
-                const requestedQty = offerRequest.quantity || 1;
+                const requestedQty = req.quantity || 1;
                 const hasStock = product.stock >= requestedQty;
 
                 return {
-                    id: offerRequest.id,
+                    id: req.offerId,
                     availability: hasStock ? "IN_STOCK" as const : "OUT_OF_STOCK" as const,
                     price: toUcpMoney(product.price, shop.currency),
                     quantity: hasStock ? requestedQty : 0,
@@ -116,9 +134,10 @@ export async function POST(request: NextRequest) {
             }),
         };
 
-        return NextResponse.json(response);
+        // 內部格式 → Google v1 response
+        return NextResponse.json(toGoogleAvailabilityResponse(internalResponse));
     } catch (error) {
-        console.error("[UCP Availability] Error:", error);
+        console.error("[UCP v1 Availability] Error:", error);
         return NextResponse.json(
             formatUcpError("INTERNAL_ERROR", "Internal server error"),
             { status: 500 }

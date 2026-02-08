@@ -202,7 +202,7 @@ export interface UcpError {
 // Profile / Discovery
 // ===========================================
 
-/** UCP Profile */
+/** UCP Profile（ucp.dev 風格，已 deprecated） */
 export interface UcpProfile {
     version: string;
     profile: {
@@ -225,4 +225,186 @@ export interface UcpProfile {
         };
         capabilities: string[];
     };
+}
+
+// ===========================================
+// Google Merchant Shopping APIs v1 — Profile
+// ===========================================
+
+/** Google Merchant UCP Profile（/.well-known/ucp/profile.json） */
+export interface GoogleUcpProfile {
+    /** 服務提供者名稱 */
+    provider: string;
+    /** 商店顯示名稱 */
+    title: string;
+    /** v1 API base URL pattern */
+    urlPattern: string;
+    /** 結帳配置 */
+    checkoutConfig: {
+        type: "NATIVE" | "REDIRECT";
+        supportedPaymentMethods: string[];
+        supportedShippingCountries: string[];
+        checkoutUrl?: string;
+    };
+    /** 訂單管理配置 */
+    orderManagement: {
+        callbackUrl: string;
+        supportedActions: ("CANCEL" | "REFUND" | "RETURN")[];
+    };
+    /** 認證配置 */
+    authentication: {
+        type: "API_KEY" | "OAUTH2" | "HMAC";
+        apiRequestHeaders?: Record<string, string>;
+    };
+}
+
+// ===========================================
+// Google Merchant Shopping APIs v1 — Checkout
+// ===========================================
+
+/** Google v1 建立 Checkout Session 請求 */
+export interface GoogleCreateCheckoutRequest {
+    merchantId: string;
+    checkoutOptions?: {
+        requestedProcessingType?: "CHECKOUT_AND_PAY" | "CHECKOUT_ONLY";
+    };
+    cart: {
+        items: Array<{
+            offer: {
+                offerId: string;
+                price?: UcpMoney;
+            };
+            quantity: number;
+        }>;
+        currency?: string;
+    };
+    shippingAddress?: UcpAddress;
+    billingAddress?: UcpAddress;
+    buyerInfo?: {
+        email?: string;
+        phone?: string;
+    };
+    selectedDeliveryOptionRef?: string;
+    metadata?: Record<string, string>;
+}
+
+/** Google v1 Checkout Session 回應 */
+export interface GoogleCheckoutSessionResponse {
+    id: string;
+    merchantId: string;
+    state: "CREATED" | "OPEN" | "CLOSED" | "EXPIRED";
+    cart: {
+        items: Array<{
+            offer: {
+                offerId: string;
+                price: UcpMoney;
+            };
+            quantity: number;
+        }>;
+        subtotal: UcpMoney;
+        shippingCost?: UcpMoney;
+        tax?: UcpMoney;
+        total: UcpMoney;
+    };
+    shippingAddress?: UcpAddress;
+    billingAddress?: UcpAddress;
+    availablePaymentMethods: Array<{
+        id: string;
+        type: string;
+        name: string;
+        supportedNetworks?: string[];
+    }>;
+    availableDeliveryOptions?: Array<{
+        ref: string;
+        name: string;
+        cost: UcpMoney;
+        estimatedDays?: number;
+    }>;
+    expiresAt: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** Google v1 更新 Checkout Session 請求 */
+export interface GoogleUpdateCheckoutRequest {
+    shippingAddress?: UcpAddress;
+    billingAddress?: UcpAddress;
+    selectedDeliveryOptionRef?: string;
+    selectedPaymentMethodId?: string;
+}
+
+/** Google v1 Complete Checkout 請求 */
+export interface GoogleCompleteCheckoutRequest {
+    paymentInfo: {
+        paymentProcessorToken?: string;
+        paymentMethodType?: string;
+    };
+}
+
+// ===========================================
+// Google Merchant Shopping APIs v1 — Orders
+// ===========================================
+
+/** Google v1 訂單狀態 */
+export type GoogleOrderState =
+    | "CREATED"
+    | "IN_PROGRESS"
+    | "COMPLETED"
+    | "CANCELLED"
+    | "RETURNED";
+
+/** Google v1 訂單回應 */
+export interface GoogleOrderResponse {
+    id: string;
+    merchantId: string;
+    merchantOrderId: string;
+    state: GoogleOrderState;
+    lineItems: Array<{
+        offerId: string;
+        quantity: number;
+        price: UcpMoney;
+    }>;
+    subtotal: UcpMoney;
+    shippingCost?: UcpMoney;
+    tax?: UcpMoney;
+    total: UcpMoney;
+    shippingAddress?: UcpAddress;
+    billingAddress?: UcpAddress;
+    paymentSummary: {
+        status: "PENDING" | "AUTHORIZED" | "CAPTURED" | "FAILED" | "REFUNDED";
+        transactionId?: string;
+    };
+    deliveryDetails?: {
+        carrier?: string;
+        trackingNumber?: string;
+        trackingUrl?: string;
+        estimatedDelivery?: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+}
+
+// ===========================================
+// Google Merchant Shopping APIs v1 — Availability
+// ===========================================
+
+/** Google v1 庫存查詢請求 */
+export interface GoogleAvailabilityRequest {
+    merchantId: string;
+    products: Array<{
+        offerId: string;
+        quantity?: number;
+    }>;
+    shippingAddress?: UcpAddress;
+}
+
+/** Google v1 庫存查詢回應 */
+export interface GoogleAvailabilityResponse {
+    products: Array<{
+        offerId: string;
+        availability: "IN_STOCK" | "OUT_OF_STOCK" | "PREORDER" | "BACKORDER";
+        price: UcpMoney;
+        quantityAvailable?: number;
+        maxOrderQuantity?: number;
+    }>;
 }
