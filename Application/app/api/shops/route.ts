@@ -78,20 +78,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 檢查方案限制
-    const tenant = await db.tenant.findUnique({
-      where: { id: session.user.tenantId },
-      include: { _count: { select: { shops: true } } },
+    // [不可變規則] 單店制：每個 tenant 只能有 1 個 shop
+    // 參考: docs/02_System_Analysis/05_Single_Tenant_Single_Shop.md
+    const existingShop = await db.shop.findFirst({
+      where: { tenantId: session.user.tenantId },
+      select: { id: true },
     });
 
-    const maxShops = { SEED: 1, GROWTH: 3, PRO: 10 };
-    if (tenant && tenant._count.shops >= maxShops[tenant.plan]) {
+    if (existingShop) {
       return NextResponse.json(
         {
           success: false,
-          error: { code: "FORBIDDEN", message: `您的方案最多只能建立 ${maxShops[tenant.plan]} 個商店` },
+          error: { code: "CONFLICT", message: "每個租戶只能建立一個商店" },
         },
-        { status: 403 }
+        { status: 409 }
       );
     }
 

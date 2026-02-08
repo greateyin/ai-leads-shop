@@ -85,7 +85,8 @@ export default function OrderLookupPage() {
             const response = await fetch("/api/orders/lookup", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, orderNo, shopSlug: shopSlug || "" }),
+                // [單店制] shopSlug 不再傳送，tenant 邊界改由 host 解析
+                body: JSON.stringify({ email, orderNo }),
             });
 
             const data = await response.json();

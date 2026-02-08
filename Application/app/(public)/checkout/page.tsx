@@ -43,6 +43,7 @@ export default function CheckoutPage() {
     const [cart, setCart] = useState<{ items: CartItem[]; total: number } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    /** @deprecated shopSlug 不再用於訂單建立，tenant 邊界改由 host 解析 */
     const [shopSlug, setShopSlug] = useState<string | null>(null);
     const [isGuest, setIsGuest] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -206,9 +207,7 @@ export default function CheckoutPage() {
                 orderPayload.guestEmail = formData.guestEmail;
                 orderPayload.guestPhone = formData.guestPhone;
                 orderPayload.guestName = formData.guestName;
-                if (shopSlug) {
-                    orderPayload.shopSlug = shopSlug;
-                }
+                // [單店制] shopSlug 不再傳送，tenant 邊界改由 host 解析
             }
 
             // 附加 UTM 行銷歸因資料（若有）

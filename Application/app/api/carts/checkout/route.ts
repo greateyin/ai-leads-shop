@@ -8,7 +8,9 @@ import { generateId } from "@/lib/id";
  * 結帳 Schema
  */
 const checkoutSchema = z.object({
-    shopId: z.string().uuid("商店 ID 格式錯誤"),
+    // [deprecated] shopId 已移除，單店制下由 tenant 推導唯一 shop
+    // 保留欄位但忽略，避免前端未同步時報錯
+    shopId: z.string().uuid().optional(),
     shippingAddress: z.object({
         contactName: z.string().min(1, "收件人姓名為必填"),
         phone: z.string().min(1, "電話為必填"),
@@ -63,7 +65,23 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { shopId, shippingAddress, billingAddress } = validation.data;
+        const { shippingAddress, billingAddress } = validation.data;
+
+        // [不可變規則] 單店制：由 tenant 推導唯一 shop，不信任 client 傳入的 shopId
+        // 參考: docs/02_System_Analysis/05_Single_Tenant_Single_Shop.md
+        const shop = await db.shop.findFirst({
+            where: { tenantId: session.user.tenantId },
+            select: { id: true, currency: true },
+        });
+
+        if (!shop) {
+            return NextResponse.json(
+                { success: false, error: { code: "NOT_FOUND", message: "找不到商店，請先建立商店" } },
+                { status: 404 }
+            );
+        }
+
+        const shopId = shop.id;
 
         // 取得購物車
         const cart = await db.cart.findFirst({

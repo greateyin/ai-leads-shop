@@ -12,11 +12,13 @@ const updatePlanSchema = z.object({
 
 /**
  * 方案限制定義
+ * [不可變規則] shops 維度已移除 — 單店制由 DB unique 約束強制
+ * 參考: docs/02_System_Analysis/05_Single_Tenant_Single_Shop.md
  */
-const planLimits: Record<string, { products: number; shops: number; users: number }> = {
-    SEED: { products: 10, shops: 1, users: 2 },
-    GROWTH: { products: 100, shops: 3, users: 10 },
-    PRO: { products: -1, shops: -1, users: -1 }, // -1 表示無限制
+const planLimits: Record<string, { products: number; users: number }> = {
+    SEED: { products: 10, users: 2 },
+    GROWTH: { products: 100, users: 10 },
+    PRO: { products: -1, users: -1 }, // -1 表示無限制
 };
 
 /**
@@ -79,7 +81,6 @@ export async function PATCH(
                 _count: {
                     select: {
                         products: true,
-                        shops: true,
                         users: true,
                     },
                 },
@@ -105,9 +106,6 @@ export async function PATCH(
 
             if (newLimits.products !== -1 && tenant._count.products > newLimits.products) {
                 violations.push(`商品數量 (${tenant._count.products}) 超過 ${newPlan} 方案上限 (${newLimits.products})`);
-            }
-            if (newLimits.shops !== -1 && tenant._count.shops > newLimits.shops) {
-                violations.push(`商店數量 (${tenant._count.shops}) 超過 ${newPlan} 方案上限 (${newLimits.shops})`);
             }
             if (newLimits.users !== -1 && tenant._count.users > newLimits.users) {
                 violations.push(`用戶數量 (${tenant._count.users}) 超過 ${newPlan} 方案上限 (${newLimits.users})`);

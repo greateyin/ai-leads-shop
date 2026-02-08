@@ -224,9 +224,11 @@ model ResetToken {
 // ===========================================
 
 /// 商店
+/// [不可變規則] 每個 Tenant 只能有 1 個 Shop（@@unique([tenantId])）
+/// 參考: docs/02_System_Analysis/05_Single_Tenant_Single_Shop.md
 model Shop {
   id          String   @id @db.Uuid
-  tenantId    String   @db.Uuid
+  tenantId    String   @unique @db.Uuid /// 單店制：每個 tenant 只能有一家店
   ownerId     String   @db.Uuid
   name        String
   slug        String   @unique
@@ -246,7 +248,6 @@ model Shop {
   products Product[]
   orders   Order[]
 
-  @@index([tenantId])
   @@map("shops")
 }
 
@@ -308,8 +309,8 @@ model Product {
   orderItems OrderItem[]
   cartItems  CartItem[]
 
-  @@unique([shopId, slug])
-  @@unique([shopId, sku])
+  @@unique([tenantId, slug]) /// 單店制後改以 tenantId 為唯一範圍
+  @@unique([tenantId, sku])  /// 單店制後改以 tenantId 為唯一範圍
   @@index([tenantId])
   @@index([status]) // Public product queries
   @@index([deletedAt])

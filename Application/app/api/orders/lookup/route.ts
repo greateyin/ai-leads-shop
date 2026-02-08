@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { resolveTenantFromRequest } from "@/lib/tenant/resolve-tenant";
 
 /**
  * 訂單查詢 Schema
@@ -8,7 +9,8 @@ import { db } from "@/lib/db";
 const lookupSchema = z.object({
     email: z.string().email("請輸入有效的電子郵件"),
     orderNo: z.string().min(1, "請輸入訂單編號"),
-    shopSlug: z.string().min(1, "缺少商店識別"),
+    /** @deprecated 單店制後不再使用；tenant 邊界改由 request host 解析。保留僅為前端向後相容。 */
+    shopSlug: z.string().optional(),
 });
 
 /**
@@ -33,30 +35,28 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { email, orderNo, shopSlug } = validation.data;
+        const { email, orderNo } = validation.data;
 
-        // [安全] 透過 shopSlug 限定 tenant scope，防止跨租戶訂單枚舉
+        // [安全] 從 request host 解析租戶，不信任 client 傳入的 shopSlug
         // TODO: 加入 rate limiting（IP / email 維度），降低暴力枚舉風險
-        const shop = await db.shop.findFirst({
-            where: { slug: shopSlug },
-            select: { tenantId: true },
-        });
+        const tenant = await resolveTenantFromRequest(request);
 
-        if (!shop) {
+        if (!tenant) {
+            // fail-closed：無法辨識租戶時拒絕查詢
             return NextResponse.json(
                 {
                     success: false,
-                    error: { code: "NOT_FOUND", message: "找不到符合的訂單，請確認電子郵件和訂單編號是否正確" },
+                    error: { code: "FORBIDDEN", message: "無法辨識商店來源" },
                 },
-                { status: 404 }
+                { status: 403 }
             );
         }
 
-        // 查詢訂單（限定 tenant scope）
+        // 查詢訂單（以 host 解析的 tenantId 限定 scope）
         const order = await db.order.findFirst({
             where: {
                 orderNo,
-                tenantId: shop.tenantId,
+                tenantId: tenant.tenantId,
                 // 查詢訪客訂單：比對 metadata 中的 guestEmail
                 // 或查詢登入用戶的訂單：比對 user.email
                 OR: [

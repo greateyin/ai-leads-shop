@@ -125,13 +125,20 @@ export async function POST(request: NextRequest) {
         const orderNo = `UCP${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
         const orderId = generateId();
 
-        // 建立訂單項目
+        // 建立訂單項目（加 tenantId 防禦深度，避免跨租戶商品資訊洩漏）
         const orderItems = await Promise.all(
             cartData.items.map(async (item) => {
                 const product = await db.product.findFirst({
-                    where: { id: item.offerId },
+                    where: { id: item.offerId, tenantId },
                     select: { name: true, sku: true },
                 });
+
+                // 商品不存在或不屬於當前租戶時必須報錯，不可無聲建單
+                if (!product) {
+                    throw new Error(
+                        `Product ${item.offerId} not found within tenant ${tenantId}`
+                    );
+                }
 
                 const unitPrice = item.price ? fromUcpMoney(item.price) : 0;
 
@@ -139,8 +146,8 @@ export async function POST(request: NextRequest) {
                     id: generateId(),
                     tenantId,
                     productId: item.offerId,
-                    name: product?.name || "Unknown Product",
-                    sku: product?.sku || "",
+                    name: product.name,
+                    sku: product.sku || "",
                     quantity: item.quantity,
                     unitPrice,
                     discount: 0,
@@ -196,16 +203,23 @@ export async function POST(request: NextRequest) {
                 });
             }
 
-            // 扣除庫存
+            // 扣除庫存（加 tenantId 防禦深度，防止跨租戶庫存誤扣）
+            // 必須檢查 updateMany 回傳的 count，count=0 代表商品不存在或不屬於當前租戶
             for (const item of cartData.items) {
-                await tx.product.update({
-                    where: { id: item.offerId },
+                const result = await tx.product.updateMany({
+                    where: { id: item.offerId, tenantId },
                     data: {
                         stock: {
                             decrement: item.quantity,
                         },
                     },
                 });
+
+                if (result.count === 0) {
+                    throw new Error(
+                        `Stock decrement failed: product ${item.offerId} not found within tenant ${tenantId}`
+                    );
+                }
             }
 
             return newOrder;
@@ -287,6 +301,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(ucpOrder, { status: 201 });
     } catch (error) {
         console.error("[UCP Orders] Error:", error);
+
+        // 商品不存在或庫存扣減失敗 → 回傳可識別的 422 而非泛用 500
+        const errMsg = error instanceof Error ? error.message : "";
+        if (errMsg.includes("not found within tenant") || errMsg.includes("Stock decrement failed")) {
+            return NextResponse.json(
+                formatUcpError("INVALID_CART", errMsg),
+                { status: 422 }
+            );
+        }
+
         return NextResponse.json(
             formatUcpError("INTERNAL_ERROR", "Internal server error"),
             { status: 500 }
