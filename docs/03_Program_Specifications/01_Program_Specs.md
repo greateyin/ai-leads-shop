@@ -165,55 +165,62 @@ middleware.ts            # 全域 Middleware (RLS 檢查、權限驗證)
 
 ### 金流整合模組
 
-金流模組封裝所有付款提供者，對外提供統一的 `createTransaction()`、`verifyNotification()` 和 `refund()` 等函式。每筆交易應包含一個 idempotency key，確保同一訂單與供應商重試時不會產生重複交易；Webhook 需具備冪等性並映射供應商回傳狀態 (如 `RtnCode` 或 `status`) 至內部狀態 (`pending`、`paid`、`failed`、`refunded`)。實作建議使用策略模式，以 `provider` 決定使用哪個類別。
+金流模組封裝所有付款提供者，對外提供統一的 `createTransaction()`、`createFormData()`、`verifyNotification()` 和 `refund()` 等函式。每筆交易應包含一個 idempotency key，確保同一訂單與供應商重試時不會產生重複交易；Webhook 需具備冪等性並映射供應商回傳狀態至內部狀態。
+
+> 詳細架構圖與安全策略請參閱 [07_Payment_Flow_Architecture](../02_System_Analysis/07_Payment_Flow_Architecture.md)。
+
+#### 動態供應商選擇 [Inferred from code]
+
+每個 tenant 在 `payment_providers` 表設定金流供應商。建單時透過 `getDefaultProvider(tenantId)` 自動判斷：
 
 ```ts
-// PaymentService.ts
-interface PaymentProvider {
-  createTransaction(order: Order, returnUrl: string, notifyUrl: string): Promise<PaymentResult>;
-  verifyNotification(payload: any): Promise<VerifyResult>;
-  refund(payment: Payment, amount?: number): Promise<RefundResult>;
-}
-
-export class ECPayProvider implements PaymentProvider {
-  async createTransaction(order, returnUrl, notifyUrl) {
-    // 生成加密參數與簽章，呼叫綠界 API
-  }
-  async verifyNotification(payload) {
-    // 驗證 HashIV/HashKey
-  }
-  async refund(payment, amount) {
-    // 呼叫綠界退費 API
-  }
-}
-// NewebPayProvider, StripeProvider ... 類似
-
-export class PaymentService {
-  constructor(private providers: Record<string, PaymentProvider>) {}
-  async createTransaction(orderId: string, provider: string) {
-    const order = await db.orders.find(orderId);
-    const paymentProvider = this.providers[provider];
-    // 傳入唯一的 idempotency key 以避免重複交易
-    return paymentProvider.createTransaction(order, returnUrl, notifyUrl);
-  }
-  async handleWebhook(provider: string, payload: any) {
-    const paymentProvider = this.providers[provider];
-    const result = await paymentProvider.verifyNotification(payload);
-    // 更新 payments/orders 狀態
-  }
-  async refund(paymentId: string, amount?: number) {
-    // 查詢付款紀錄，選擇對應 provider 調用 refund()
-  }
+// lib/payment/index.ts
+export async function getDefaultProvider(tenantId: string) {
+  return db.paymentProvider.findFirst({ where: { tenantId, isDefault: true } })
+    ?? db.paymentProvider.findFirst({ where: { tenantId } });
 }
 ```
 
+若無供應商 → `paymentRequired: false`，訂單直接成功不進入付款流程。
+
+#### 結構化表單資料 [Inferred from code]
+
+Form-based 閘道（ECPay、NewebPay）使用 `createFormData()` 回傳結構化物件取代 raw HTML，防止 XSS：
+
+```ts
+// lib/payment/ecpay.ts | newebpay.ts
+export async function createFormData(config, order): Promise<{
+  actionUrl: string;
+  fields: Record<string, string>;
+  merchantTradeNo: string; // or merchantOrderNo
+}>;
+```
+
+前端以 hidden `<form>` auto-submit 到閘道，不注入任何 HTML 字串。
+
 #### 金流 API 端點
 
-| 路由 | 方法 | 描述 |
-|---|---|---|
-| `/api/payments` | POST | 接收 `orderId`、`provider`，呼叫 `PaymentService.createTransaction()`，返回金流頁面資訊 (HTML form 或 client secret)。 |
-| `/api/payments/{provider}/notify` | POST | 供各供應商通知 (provider = `ecpay` / `newebpay` / `stripe` / `paypal`)；調用對應驗證邏輯；更新 `payments`、`orders`。回傳格式依供應商規範（ECPay 需回傳 `1|OK` 純文字，其餘回傳 JSON `{received: true}`）。 |
-| `/api/payments/{id}/refund` | POST | 部分或全額退款；需要判斷訂單狀態與可退金額。 |
+| 路由 | 方法 | 描述 | 認證 |
+|---|---|---|---|
+| `/api/orders/[id]/pay` | POST | **主要付款端點** [Inferred from code]：接收 `email?`、`returnUrl`；依 tenant 供應商產生加密表單或 Stripe redirect。 | Tenant 邊界 + 身份驗證（登入用戶 userId / 訪客 email） |
+| `/api/orders/[id]/status` | GET | **狀態輪詢端點** [Inferred from code]：輕量查詢付款狀態，供結果頁輪詢。Query: `?email=xxx`。 | Tenant 邊界 + 身份驗證 |
+| `/api/payments` | POST | 舊版付款端點：接收 `orderId`、`provider`，需登入。 | `authWithTenant()` |
+| `/api/payments/{provider}/notify` | POST | 金流回調 (provider = `ecpay` / `newebpay` / `stripe` / `paypal`)；驗簽 → 更新 `payments`、`orders`。ECPay 回傳 `1|OK` 純文字，其餘 JSON。 | 無（server-to-server） |
+| `/api/payments/{id}/refund` | POST | 部分或全額退款；需要 `withAdminAuth`。 | `withAdminAuth` |
+
+#### 安全策略 [Inferred from code]
+
+pay/status 端點實作三層防護：
+
+1. **Tenant 邊界**：`resolveTenantFromRequest(request)` 解析 host → `db.order.findFirst({ where: { id, tenantId } })`
+2. **登入用戶**：`authWithTenant()` 取 session → `session.user.id === order.userId`
+3. **訪客用戶**：`email` 必填 → `metadata.guestEmail` 大小寫不敏感比對
+
+#### Payment 狀態流轉
+
+```
+INITIATED → PENDING → PAID / FAILED → REFUNDED
+```
 
 此模組需實作重試機制與冪等處理，確保 webhook 重複送達時不會重複結帳。
 
@@ -271,19 +278,57 @@ API 端點：
 
 UCP 模組實作了 "Agentic Commerce" 協議，允許外部 AI Agent (如 Google Shopping Agent) 直接發現商品並進行結帳。
 
-核心邏輯：
-*   **Discovery**: 提供符合 Schema.org 與 UCP 規範的商品結構化資料。
-*   **Checkout Session**: 透過 `ucp_checkout_sessions` 表管理 Agent 發起的結帳請求。
-*   **Webhooks**: 接收 Agent 的狀態更新通知。
+> 詳細改造計畫請參閱 [06_UCP_Google_Alignment_Plan](../02_System_Analysis/06_UCP_Google_Alignment_Plan.md)。
 
-API 端點：
+#### 架構 [Inferred from code]
+
+採用 **雙軌路由 + 共享 Handler** 架構：
+
+- **v1 路由** (`app/api/ucp/v1/`)：對齊 Google Merchant Shopping APIs v1 規範
+- **舊路由** (`app/api/ucp/`)：保留但標記 `@deprecated`（Sunset: 2026-05-31）
+- **共享邏輯** (`lib/ucp/handlers/`)：checkout、orders、shipping、callbacks、profile
+- **Google 轉接器** (`lib/ucp/adapters/google.ts`)：雙向 schema 轉換
+
+核心模組：
+
+| 模組 | 路徑 | 功能 |
+|---|---|---|
+| **Handlers** | `lib/ucp/handlers/checkout.ts` | 建立/讀取/更新 Checkout Session（含動態運費重算） |
+| **Handlers** | `lib/ucp/handlers/orders.ts` | 從 Session 建立訂單、查詢訂單、狀態映射 |
+| **Handlers** | `lib/ucp/handlers/shipping.ts` | 運費計算引擎（包裝 `lib/logistics`） |
+| **Handlers** | `lib/ucp/handlers/callbacks.ts` | 訂單生命週期回調（HMAC 簽名、指數退避重試） |
+| **Adapter** | `lib/ucp/adapters/google.ts` | 內部 UCP ↔ Google v1 schema 轉換 |
+| **Middleware** | `lib/ucp/middleware.ts` | UCP API Key 驗證、merchantId 解析 |
+| **Deprecation** | `lib/ucp/deprecation.ts` | 舊路由加 Deprecation/Sunset/Link headers |
+
+#### API 端點（v1 Google 相容）[Inferred from code]
 
 | 路由 | 方法 | 功能 |
 |---|---|---|
-| `/api/ucp/discovery` | GET | 返回符合 UCP 規範的商品清單與 Capabilities |
-| `/api/ucp/sessions` | POST | 創建 UCP 結帳 Session；接收外部購物車資料 |
-| `/api/ucp/sessions/{id}` | GET | 查詢 Session 狀態 |
-| `/api/ucp/webhook` | POST | 接收 UCP 平台 (如 Google) 的回調 |
+| `/.well-known/ucp/profile.json` | GET | Google UCP Profile 端點 |
+| `/api/ucp/v1/checkout-sessions` | POST | 建立 Checkout Session |
+| `/api/ucp/v1/checkout-sessions/{id}` | GET | 讀取 Session |
+| `/api/ucp/v1/checkout-sessions/{id}` | PUT | 更新 Session（含運費重算） |
+| `/api/ucp/v1/checkout-sessions/{id}/complete` | POST | 完成結帳 → 建立訂單 |
+| `/api/ucp/v1/orders/{orderId}` | GET | 查詢訂單 |
+| `/api/ucp/v1/products/availability` | POST | 商品庫存查詢 |
+| `/api/ucp/v1/callbacks/orders` | POST | 接收訂單動作（CANCEL, REFUND, RETURN） |
+| `/api/ucp/v1/metrics` | GET | UCP 指標 |
+
+#### 舊路由（Deprecated）
+
+| 路由 | 方法 | 說明 |
+|---|---|---|
+| `/api/ucp/profile` | GET | 舊 Profile（加 Deprecation header） |
+| `/api/ucp/checkout-sessions` | POST/GET | 舊 Session 端點 |
+| `/api/ucp/orders` | POST/GET | 舊訂單端點 |
+| `/api/ucp/availability` | POST | 舊庫存查詢 |
+| `/api/ucp/products` | GET | 商品列表（保留） |
+
+#### 測試覆蓋 [Inferred from code]
+
+- `tests/api/ucp-v1-handlers.test.ts` — 23 個單元測試（money utils、Google adapter、shipping engine、callback HMAC/retry、checkout 更新）
+- `tests/api/ucp-v1-e2e.test.ts` — E2E 流程測試
 
 ### 檔案管理模組 (File Management)
 
@@ -329,7 +374,12 @@ API 端點：
 | `isValidEmail(email: string): boolean` | `lib/utils.ts` | 驗證 email 格式 |
 | `hashPassword(password: string): Promise<string>` | `lib/auth.ts` | 使用 bcrypt 或 argon2 雜湊密碼 |
 | `verifyPassword(password, hash)` | `lib/auth.ts` | 驗證密碼 |
-| `withAuth(handler, roles?)` | `middleware.ts` | 檢查 session 與權限 |
+| `withAuth(handler, roles?)` | `lib/middleware/withAuth.ts` | 檢查 session 與權限 |
+| `generateId(): string` | `lib/id.ts` | 產生 UUIDv7（時間排序、全域唯一）[Inferred from code] |
+| `resolveTenantFromRequest(req): Promise<TenantInfo>` | `lib/tenant/resolve-tenant.ts` | 從 request host 解析 tenant（支援 custom domain、subdomain、localhost）[Inferred from code] |
+| `resolveTenant(hostname): Promise<TenantInfo>` | `lib/tenant/resolve-tenant.ts` | 從 hostname 解析 tenant [Inferred from code] |
+| `authWithTenant(opts): Promise<{session, tenant}>` | `lib/api/auth-helpers.ts` | 認證 + tenant 驗證一體化函式（查 session + DB 確認角色/租戶關聯）[Inferred from code] |
+| `getDefaultProvider(tenantId): Promise<PaymentProvider>` | `lib/payment/index.ts` | 取得 tenant 預設金流供應商 [Inferred from code] |
 
 這些工具函式提高重用性並使程式保持乾淨。
 
@@ -408,9 +458,13 @@ API 返回格式統一採用 JSON：
 | 錯誤碼 | HTTP 狀態 | 說明 |
 |---|---|---|
 | `INVALID_INPUT` | 400 | 請求欄位缺失或格式錯誤 |
+| `TENANT_NOT_FOUND` | 400 | 無法從 request host 解析租戶 [Inferred from code] |
 | `UNAUTHORIZED` | 401 | 未登入或 session 過期 |
-| `FORBIDDEN` | 403 | 權限不足 |
-| `NOT_FOUND` | 404 | 資源不存在 |
+| `FORBIDDEN` | 403 | 權限不足（含跨租戶、userId 不匹配、email 不匹配） |
+| `EMAIL_REQUIRED` | 400 | 訪客訂單付款需提供電子郵件 [Inferred from code] |
+| `NOT_FOUND` | 404 | 資源不存在（含跨租戶查詢） |
+| `ALREADY_PAID` | 409 | 訂單已付款，不可重複付款 [Inferred from code] |
+| `NO_PROVIDER` | 400 | 租戶未設定金流供應商 [Inferred from code] |
 | `CONFLICT` | 409 | 資源衝突，如 Email 已存在 |
 | `RATE_LIMITED` | 429 | 超出呼叫頻率限制 |
 | `INTERNAL_ERROR` | 500 | 伺服器內部錯誤 |

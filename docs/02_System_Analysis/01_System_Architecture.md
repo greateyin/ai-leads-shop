@@ -44,70 +44,200 @@ AIsell 是一個面向微型零售商與創作者的 SaaS 服務。目標是讓�
 
 ## 2 目錄結構與程式架構
 
-### 2.1 Next.js 專案目錄建議
+### 2.1 Next.js 專案目錄
 
-採用 App Router 風格的目錄，以功能模組區分。下面顯示的是建議的專案結構（僅列出核心部分）：
+> **[Synced with codebase: 2026-02-10]**
+
+採用 App Router 風格的目錄，以功能模組區分。以下為實際專案結構（僅列出核心部分）：
 
 ```
 app/
-  layout.tsx           # 根 layout，引入 SessionProvider、Tailwind/ThemeProviders
-  page.tsx             # 首頁 (Landing / 宣傳頁)
-  (auth)/              # 公共登入、註冊、忘記密碼頁
+  layout.tsx                # 根 layout，引入 SessionProvider、Tailwind/ThemeProviders
+  page.tsx                  # 首頁 (Landing / 宣傳頁)
+
+  (auth)/                   # 公共認證頁面（route group，不影響 URL）
     login/page.tsx
     register/page.tsx
-    callback/route.ts  # OAuth callback route handler
-  dashboard/           # 登入後之店家後台，路由層級受保護
-    layout.tsx         # 儀表板 layout
-    page.tsx           # 儀表板首頁
+    callback/route.ts       # OAuth callback route handler
+
+  (public)/                 # 前台店面頁面（route group）
     products/
-      page.tsx         # 商品列表
-      new/page.tsx     # 新建商品表單，包含 AI 描述生成
-      [id]/edit/page.tsx  # 編輯商品
-    orders/
-      page.tsx         # 訂單列表與搜尋
-      [id]/page.tsx    # 訂單詳情與履約管理
-    payments/
-      page.tsx         # 金流設定及交易紀錄
-    logistics/
-      page.tsx         # 物流設定與訂單配送狀態
+      [slug]/page.tsx       # 商品詳情頁（SEO slug）
     blog/
-      page.tsx         # 部落格文章列表
-      new/page.tsx     # 新建文章 (MDX 編輯器)
-      [slug]/edit/page.tsx  # 編輯文章
-    ai/
-      interactions/page.tsx  # AI 使用紀錄
-    analytics/
-      page.tsx         # 統計與報表
+      [slug]/page.tsx       # 部落格文章頁
+    cart/page.tsx            # 購物車頁
+    checkout/
+      page.tsx              # 結帳頁
+      pay/
+        page.tsx            # 付款頁（auto-submit form 到閘道）
+        result/page.tsx     # 付款結果頁（輪詢 /api/orders/[id]/status）
+    orders/
+      lookup/page.tsx       # 訪客訂單查詢
+
+  dashboard/                # 店家後台（受保護路由）
+    layout.tsx
+    page.tsx                # 儀表板首頁
+    products/
+      page.tsx              # 商品列表
+      new/page.tsx          # 新建商品（含 AI 描述生成）
+      [id]/page.tsx         # 編輯商品
+    orders/
+      page.tsx              # 訂單列表與搜尋
+      [id]/page.tsx         # 訂單詳情與履約管理
+    payments/page.tsx       # 金流設定及交易紀錄
+    logistics/page.tsx      # 物流設定與配送狀態
+    blog/
+      page.tsx              # 文章列表
+      new/page.tsx          # 新建文章 (MDX 編輯器)
+      [slug]/page.tsx       # 編輯文章
+    ai/interactions/page.tsx  # AI 使用紀錄
+    analytics/page.tsx      # 統計與報表
     settings/
-      page.tsx         # 商店設定 (金流、物流、稅務、角色權限)
-    api/               # API Route handlers (BFF 層)
-      auth/[...]/route.ts     # auth.js handlers: signIn, signOut, callback
-      products/route.ts       # CRUD + list + search
-      orders/route.ts         # 建立訂單、查詢訂單
-      payments/route.ts       # 建立交易、處理回調
-      logistics/route.ts      # 創建物流訂單、查詢狀態
-      blog/route.ts           # 文章 CRUD
-      ai/route.ts             # AI 服務 proxy
+      page.tsx              # 商店設定
+      tracking/page.tsx     # GA4/Meta Pixel 追蹤碼設定
+
+  api/                      # API Route Handlers
+    auth/
+      [...nextauth]/route.ts  # Auth.js v5 handlers
+      login/route.ts
+      register/route.ts
+      forgot/route.ts
+      reset/route.ts
+      verify/route.ts
+      resend-verification/route.ts
+    products/route.ts       # 商品 CRUD + 搜尋
+    orders/
+      route.ts              # 建立訂單、查詢訂單
+      [id]/
+        route.ts            # 單一訂單操作
+        pay/route.ts        # 付款表單產生（tenant 邊界 + 身份驗證）
+        status/route.ts     # 狀態輪詢（tenant 邊界 + 身份驗證）
+      lookup/route.ts       # 訪客訂單查詢
+    payments/
+      route.ts              # 舊版付款端點
+      [id]/refund/route.ts  # 退款
+      ecpay/notify/route.ts
+      newebpay/notify/route.ts
+      stripe/notify/route.ts
+      paypal/notify/route.ts
+    carts/
+      route.ts              # 購物車操作
+      [id]/route.ts
+      checkout/route.ts
+    blog/
+      posts/route.ts
+      categories/route.ts
+      tags/route.ts
+    logistics/
+      route.ts
+      [id]/route.ts
+      stores/route.ts       # 門市查詢
+      webhook/route.ts
+    ai/
+      generate-description/route.ts
+      chat/route.ts
+      blog-summary/route.ts
+    analytics/
+      dashboard/route.ts
+      event/route.ts
+      ai-impact/route.ts
+    files/
+      upload/route.ts
+      [id]/route.ts
+    ucp/                    # UCP 舊路由（@deprecated, Sunset: 2026-05-31）
+      profile/route.ts
+      checkout-sessions/route.ts
+      orders/route.ts
+      products/route.ts
+      availability/route.ts
+      v1/                   # UCP v1 — 對齊 Google Merchant Shopping APIs
+        checkout-sessions/
+          route.ts
+          [checkoutSessionId]/route.ts
+        orders/
+          route.ts
+          [orderId]/route.ts
+        products/availability/route.ts
+        callbacks/orders/route.ts
+        metrics/route.ts
+    shops/route.ts          # 商店設定
+    tenants/route.ts        # 租戶管理
+    users/route.ts          # 使用者管理
+    usage/route.ts          # 用量查詢
+    cron/
+      daily/route.ts
+      hourly/route.ts
+
+  .well-known/              # 標準化端點
+    ucp/profile.json/route.ts            # UCP Profile (Google v1)
+    merchant-api/ucp/profile.json/route.ts  # 備用路徑
+
 lib/
-  auth.ts            # Auth.js v5 設定檔，定義 providers、callbacks 等
-  db.ts              # Prisma/Drizzle 初始化與多租戶過濾
+  auth.ts                # Auth.js v5 設定檔
+  auth-rate-limit.ts     # 認證速率限制
+  db.ts                  # Prisma Client 初始化
+  id.ts                  # UUIDv7 產生器
+  utils.ts               # 共用工具函式
+  stock.ts               # 庫存管理
+  ai.ts                  # OpenAI / LLM 呼叫
+  email.ts               # 郵件發送
+  mdx.tsx                # MDX 渲染
+  vector.ts              # 向量資料庫
+  rate-limit.ts          # API 速率限制
+  api/
+    auth-helpers.ts      # authWithTenant() — 認證 + tenant 驗證
+  middleware/
+    withAuth.ts          # RBAC 中介函式
+  tenant/
+    resolve-tenant.ts    # resolveTenantFromRequest() — hostname → tenantId
   payment/
-    ecpay.ts         # 封裝綠界 API 呼叫與簽章計算
-    newebpay.ts      # 封裝藍新 API 呼叫與加解密
-    stripe.ts        # 封裝 Stripe API (PaymentIntent/Checkout Session)
+    index.ts             # getDefaultProvider()、PaymentFormData 型別
+    ecpay.ts             # 綠界 API（createFormData, createTransaction, verifyNotification）
+    newebpay.ts          # 藍新 API（createFormData, createTransaction, verifyNotification）
+    stripe.ts            # Stripe API（createCheckoutSession, createPaymentIntent）
+    paypal.ts            # PayPal API
   logistics/
-    ecpay.ts         # 綠界物流與超商取件
-    newebpay.ts      # 藍新物流
-  ai.ts              # 呼叫 OpenAI 或其他 LLM
-  utils.ts           # 共用工具函式
+    ecpay.ts             # 綠界物流
+  storage/               # 檔案儲存（S3/R2/Blob）
+  seo/                   # SEO 工具（JSON-LD、OpenGraph）
+  jobs/                  # 背景任務
+  actions/               # Server Actions
+  ucp/
+    types.ts             # UCP 型別定義
+    middleware.ts        # UCP API Key 驗證、merchantId 解析
+    guard.ts             # UCP 權限守衛
+    deprecation.ts       # 舊路由 Deprecation/Sunset headers
+    metrics.ts           # UCP 指標收集
+    adapters/
+      google.ts          # 內部 UCP ↔ Google v1 schema 轉換
+    handlers/
+      checkout.ts        # Checkout Session CRUD（含動態運費）
+      orders.ts          # 訂單建立/查詢/狀態映射
+      shipping.ts        # 運費計算引擎
+      callbacks.ts       # 訂單回調（HMAC 簽名、指數退避重試）
+      profile.ts         # UCP Profile 產生
+
 components/
-  ui/                # 封裝 shadcn 元件 (Button, Input, Table, Modal 等)
-  forms/             # 通用表單控制元件 (FormProvider, Field)
-  modals/            # 確認彈窗、AI 對話框
-  layouts/           # 不同區域的 Layout 組件
-  charts/            # 使用 Chart.js 或其它繪圖庫
-types/               # TypeScript 型別定義 (DB 模型、DTO、API interface)
-middleware.ts        # 全域 Middleware，用於權限檢查與租戶解析
+  ui/                    # shadcn/ui 元件
+  layout/                # Layout 組件
+  admin/                 # 後台專用元件
+  product/               # 商品相關元件
+  cart/                  # 購物車元件
+  checkout/              # 結帳元件
+  seo/                   # SEO 元件（JSON-LD、OpenGraph）
+  tracking/              # 追蹤代碼注入
+
+types/                   # TypeScript 型別定義 (DB 模型、DTO、API interface)
+prisma/
+  schema.prisma          # 資料庫 schema
+  seed-payment-provider.ts  # 金流供應商種子腳本
+tests/
+  api/                   # API 整合/安全測試
+  lib/                   # Lib 單元測試
+    tenant/              # Tenant 解析測試
+  components/            # 元件測試
+e2e/                     # Playwright E2E 測試
+middleware.ts            # 全域 Middleware（權限檢查與租戶解析）
 ```
 
 ### 2.2 程式架構概述
@@ -207,18 +337,23 @@ middleware.ts        # 全域 Middleware，用於權限檢查與租戶解析
 3. **保存商品**：在預覽與人工編輯後，點擊「儲存」。Server Action 將資料寫入 `products` 表，若有變體則批次寫入 `product_variants` 與 `product_assets`。此操作記錄於 `audit_logs`。
 4. **前端展示**：商品列表頁使用 Next.js Server Component 讀取 `products` 表，利用 Cache Components 快取靜態區塊，而庫存數量以 `use()` 或 `swr` 再取得即時資料。
 
-### 4.3 下單與付款流程
+### 4.3 下單與付款流程
 
-1. **購物車**：顧客於前台 (shop 子域名) 瀏覽商品，將商品加入購物車。購物車資料可存於瀏覽器 localStorage 並同步至伺服器端 `carts` 表或 Redis。
-2. **結帳**：在結帳頁輸入寄送地址與聯絡資訊，選擇物流方式與金流方式。BFF 計算運費與總價並顯示訂單摘要。
-3. **建立訂單**：點擊「確認訂單」，BFF 產生唯一 `order_no`，寫入 `orders`、`order_items`、`addresses`；狀態為 `pending`，等待付款。
-4. **呼叫金流**：依顧客選擇的供應商：
-   - **ECPay/NewebPay** – BFF 呼叫自有 `payment_service.createTransaction()`，產生加密參數與簽章，回傳 HTML 表單或重導 URL 至供應商付款頁。客戶填入卡號/選擇超商後完成付款。供應商會立即於前端顯示付款狀態，並於後端呼叫 `notify_url` 傳送交易結果。
-   - **Stripe** – BFF 使用 Stripe SDK 建立 Payment Intent 或 Checkout Session，設定金額、幣別、成功與取消回呼網址，回傳 `client_secret`。前端調用 Stripe.js `stripe.confirmPayment()` 或 `redirectToCheckout()`。完成後 Stripe 透過 webhook 通知。
-5. **付款回調**：金流服務向設定的 webhook/notify URL 發送交易結果。Route Handler 驗證簽章後更新 `payments.status` 與 `orders.payment_status`。針對超商、ATM 付款，須等待實際付款後再更新狀態。
-6. **發票與對帳**：若開立電子發票（ECPay Invoice API），在收到付款成功通知後呼叫發票 API 建立發票。每天批次對帳並更新結算狀態。
-7. **庫存更新**：當付款成功後，系統扣減 `products.stock` 或 `product_variants.stock`，若庫存低於安全值發送通知。
-8. **通知顧客**：透過 Email 或 Line 通知顧客付款結果與物流資訊。
+> **[Synced with codebase: 2026-02-10]** — 詳細架構圖與安全策略請參閱 [07_Payment_Flow_Architecture](07_Payment_Flow_Architecture.md)。
+
+1. **購物車**：顧客於前台 `(public)/` 路由瀏覽商品，將商品加入購物車。購物車資料可存於瀏覽器 localStorage 並同步至伺服器端 `carts` 表。
+2. **結帳**：在 `(public)/checkout/page.tsx` 輸入寄送地址與聯絡資訊（訪客需提供 email）。BFF 計算運費與總價並顯示訂單摘要。
+3. **建立訂單**：點擊「確認訂單」，`POST /api/orders` 產生唯一 `order_no`（UUIDv7），寫入 `orders`、`order_items`、`addresses`；同時呼叫 `getDefaultProvider(tenantId)` 判斷是否有金流供應商：
+   - **有供應商** → 建立 `Payment(status=INITIATED)`，回傳 `{ paymentRequired: true, paymentId }`
+   - **無供應商** → 回傳 `{ paymentRequired: false }`，訂單直接成功
+4. **付款表單產生** (`POST /api/orders/[id]/pay`)：前端導向 `(public)/checkout/pay/page.tsx`，呼叫此端點。端點先執行 **Tenant 邊界驗證** 與 **身份驗證**（登入用戶比對 session userId，訪客比對 email 與 `metadata.guestEmail`），再依供應商類型產生付款資料：
+   - **ECPay/NewebPay** – 呼叫 `createFormData()`，回傳結構化 `{ actionUrl, fields }` 物件（非 raw HTML，防 XSS）。前端以 hidden `<form>` auto-submit 到閘道。
+   - **Stripe** – 呼叫 `createCheckoutSession()`，回傳 `{ redirectUrl }`。前端直接 redirect。
+5. **付款回調**：金流服務向 `POST /api/payments/{provider}/notify` 發送交易結果。Route Handler 驗證簽章後更新 `payments.status` 與 `orders.paymentStatus`。針對超商、ATM 付款，須等待實際付款後再更新狀態。
+6. **狀態輪詢** (`GET /api/orders/[id]/status`)：付款結果頁 `(public)/checkout/pay/result/page.tsx` 每 2 秒輪詢此端點（最多 10 次）。端點同樣執行 Tenant 邊界 + 身份驗證，回傳 `{ status, paymentStatus }`。訪客需於 query param 帶上 `?email=xxx`。
+7. **發票與對帳**：若開立電子發票（ECPay Invoice API），在收到付款成功通知後呼叫發票 API 建立發票。每天批次對帳並更新結算狀態。
+8. **庫存更新**：當付款成功後，系統扣減 `products.stock` 或 `product_variants.stock`，若庫存低於安全值發送通知。
+9. **通知顧客**：透過 Email 或 Line 通知顧客付款結果與物流資訊。
 
 ### 4.4 物流與取件流程
 
@@ -338,15 +473,19 @@ middleware.ts        # 全域 Middleware，用於權限檢查與租戶解析
 | AI 描述 | 封裝 AI 描述生成與 FAQ 建議；儲存於 `ai_interactions` 以供日後追蹤。 | POST `/api/ai/generate-description`，傳入商品名稱與要素，回傳 Markdown/FAQ；寫入 `ai_interactions`。 |
 | OpenGraph | 商品頁與分享需帶入 OpenGraph metadata；可使用商品欄位覆寫預設值。 | `products` 儲存 `og_title`、`og_description`、`og_image_url`；渲染時優先使用商品設定。 |
 
-### 6.4 訂單與支付服務
+### 6.4 訂單與支付服務
+
+> **[Synced with codebase: 2026-02-10]** — 完整架構請參閱 [07_Payment_Flow_Architecture](07_Payment_Flow_Architecture.md)。
 
 | 功能 | 描述 | 接口 |
 |---|---|---|
-| 購物車管理 | 管理購物車項目，支援新增、更新、刪除商品並即時計算總價與庫存。 | POST `/api/carts/add-item` 新增購物車項目；PATCH `/api/carts/update-item` 更新或刪除項目；若庫存不足返回錯誤。 |
-| 建立訂單 | 由購物車產生訂單，計算價格、運費與折扣，生成 `order_no`。 | POST `/api/orders`；BFF 會驗證庫存並執行交易。 |
-| 訂單查詢 | 店家/顧客可依狀態、日期篩選查詢；支援分頁與匯出。 | GET `/api/orders`；支援關鍵字搜尋 (order_no, email)。 |
+| 購物車管理 | 管理購物車項目，支援新增、更新、刪除商品並即時計算總價與庫存。 | POST `/api/carts` 新增；PATCH `/api/carts/[id]` 更新；DELETE `/api/carts/[id]` 刪除；POST `/api/carts/checkout` 結帳。 |
+| 建立訂單 | 由購物車產生訂單，計算價格、運費與折扣，生成 `order_no`（UUIDv7）。建單時呼叫 `getDefaultProvider(tenantId)` 決定是否需要付款。 | POST `/api/orders`：回傳 `{ paymentRequired, paymentId }`。 |
+| 訂單查詢 | 店家/顧客可依狀態、日期篩選查詢；支援分頁與匯出。 | GET `/api/orders`；支援關鍵字搜尋 (order_no, email)。GET `/api/orders/lookup` 訪客訂單查詢。 |
 | 狀態更新 | 更新訂單與付款狀態，如 `paid`、`cancelled`、`refunded`；產生發票與通知。 | PATCH `/api/orders/{id}`；保護此接口僅店家可呼叫。 |
-| 金流整合 | 統一的 `PaymentService` 管理所有供應商。函式 `createTransaction(orderId, provider)` 根據訂單產生付款意圖並回傳付款連結或 client secret；`verifyNotification(payload)` 驗證簽章並映射供應商回傳狀態至內部狀態表。服務內部需使用 idempotency key 保證重複呼叫不會產生重複交易，Webhook 處理需具備冪等性。 | POST `/api/payments/create` 接收 `order_id`、`provider`；`POST /api/payments/webhook` 處理供應商回調並更新付款與訂單狀態；`POST /api/payments/{id}/refund` 支援部分或全額退款並寫入 `payment_refunds`。 |
+| **付款表單產生** | Tenant 邊界 + 身份驗證後，依供應商產生結構化表單 `{ actionUrl, fields }` 或 Stripe `{ redirectUrl }`。防 XSS（不回傳 raw HTML）。 | POST `/api/orders/[id]/pay`：接收 `{ email?, returnUrl }`。認證：登入用戶 session userId / 訪客 email 比對 `metadata.guestEmail`。 |
+| **狀態輪詢** | 輕量端點供付款結果頁輪詢。同樣執行 Tenant 邊界 + 身份驗證。 | GET `/api/orders/[id]/status?email=xxx`：回傳 `{ status, paymentStatus }`。 |
+| 金流回調 | 各供應商 notify 端點；驗簽後更新 `payments.status` 與 `orders.paymentStatus`。Webhook 冪等處理。 | POST `/api/payments/{provider}/notify` (provider = ecpay / newebpay / stripe / paypal)。ECPay 回傳 `1\|OK` 純文字，其餘 JSON。 |
 | 退款處理 | 支援全額與部分退款，呼叫相應金流 API。 | POST `/api/payments/{id}/refund`；更新狀態並建立退款紀錄。 |
 
 ### 6.5 物流服務
@@ -383,7 +522,26 @@ middleware.ts        # 全域 Middleware，用於權限檢查與租戶解析
 | AI 貢獻報告 | 計算 AI 功能對銷售的影響，如使用 AI 描述後銷售提升百分比。 | GET `/api/analytics/ai-impact`；跨表分析 `ai_interactions` 與 `orders`。
 | 追蹤設定 | 每個租戶可設定 GA4/Meta Pixel/GTＭ。 | GET `/api/tenants/{id}/tracking` 讀取；PUT `/api/tenants/{id}/tracking` 更新。 |
 
-### 6.9 API 回應與錯誤格式
+### 6.8.1 UCP Agentic Commerce 服務
+
+> **[Synced with codebase: 2026-02-10]** — 完整改造計畫請參閱 [06_UCP_Google_Alignment_Plan](06_UCP_Google_Alignment_Plan.md)。
+
+UCP (Universal Commerce Protocol) 實作 Agentic Commerce 協議，允許外部 AI Agent（如 Google Shopping Agent）直接發現商品並進行結帳。採用 **雙軌路由 + 共享 Handler** 架構。
+
+| 功能 | 描述 | 接口 |
+|---|---|---|
+| UCP Profile | Google 標準化 Profile 端點，聲明支援的 capabilities。 | GET `/.well-known/ucp/profile.json`；GET `/.well-known/merchant-api/ucp/profile.json`（備用路徑）。 |
+| Checkout Session | 建立/讀取/更新 Checkout Session；更新時自動重算動態運費。 | POST/GET `/api/ucp/v1/checkout-sessions`；GET/PUT `/api/ucp/v1/checkout-sessions/{id}`。 |
+| 完成結帳 | 從 Session 建立實際訂單。 | POST `/api/ucp/v1/checkout-sessions/{id}/complete`。 |
+| 訂單查詢 | 查詢 UCP 產生的訂單。 | GET `/api/ucp/v1/orders/{orderId}`。 |
+| 商品庫存 | 批量查詢商品可用庫存。 | POST `/api/ucp/v1/products/availability`。 |
+| 訂單回調 | 接收訂單生命週期動作（CANCEL, REFUND, RETURN）。使用 HMAC 簽名驗證，指數退避重試。 | POST `/api/ucp/v1/callbacks/orders`。 |
+| UCP 指標 | UCP 服務指標收集。 | GET `/api/ucp/v1/metrics`。 |
+| 舊路由 | `/api/ucp/profile`、`/api/ucp/checkout-sessions`、`/api/ucp/orders` 等。加 `Deprecation`/`Sunset`/`Link` headers；Sunset: 2026-05-31。 | 同路徑但不帶 `/v1/`。 |
+
+核心模組位於 `lib/ucp/`：handlers（checkout、orders、shipping、callbacks、profile）、adapters/google.ts（schema 轉換）、middleware.ts（API Key 驗證）、deprecation.ts。
+
+### 6.9 API 回應與錯誤格式
 
 為統一前後端溝通格式，本系統所有 API 回傳皆採用統一的 JSON 物件。成功回應包含 `success` 旗標與資料區塊：
 
@@ -412,9 +570,13 @@ middleware.ts        # 全域 Middleware，用於權限檢查與租戶解析
 | 錯誤代號 | HTTP 狀態 | 說明 |
 |---|---|---|
 | `INVALID_INPUT` | 400 | 請求欄位缺失或格式錯誤 |
+| `TENANT_NOT_FOUND` | 400 | 無法從 request host 解析租戶 [Inferred from code] |
+| `EMAIL_REQUIRED` | 400 | 訪客訂單付款需提供電子郵件 [Inferred from code] |
+| `NO_PROVIDER` | 400 | 租戶未設定金流供應商 [Inferred from code] |
 | `UNAUTHORIZED` | 401 | 未登入或 Session 過期 |
-| `FORBIDDEN` | 403 | 權限不足 |
-| `NOT_FOUND` | 404 | 資源不存在 |
+| `FORBIDDEN` | 403 | 權限不足（含跨租戶、userId 不匹配、email 不匹配）|
+| `NOT_FOUND` | 404 | 資源不存在（含跨租戶查詢回傳 404 防止列舉）|
+| `ALREADY_PAID` | 409 | 訂單已付款，不可重複付款 [Inferred from code] |
 | `CONFLICT` | 409 | 資源衝突，例如 Email 已存在 |
 | `RATE_LIMITED` | 429 | 呼叫頻率過高 |
 | `INTERNAL_ERROR` | 500 | 伺服器內部錯誤 |

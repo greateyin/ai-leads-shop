@@ -84,6 +84,26 @@
   - 測試取消訂單流程是否退回庫存。
 
 ### 金流模組
+
+* **動態供應商選擇** [Inferred from code]：
+  - 呼叫 `getDefaultProvider(tenantId)` 應優先回傳 `isDefault=true` 的供應商；無供應商時回傳 `null`。
+  - `POST /api/orders` 無供應商時應回傳 `paymentRequired: false`。
+
+* **付款表單產生 (`POST /api/orders/[id]/pay`)** [Inferred from code]：
+  - ECPay/NewebPay 應回傳 `{ actionUrl, fields }` 結構化表單資料（非 raw HTML）。
+  - Stripe 應回傳 `{ redirectUrl }`。
+  - 已付款訂單應回傳 409 `ALREADY_PAID`。
+
+* **安全端點測試** [Inferred from code]（`tests/api/payment-endpoints.test.ts`, 17 tests）：
+  - Tenant 邊界：無法解析 tenant → 400；跨租戶訂單 → 404。
+  - 訪客驗證：缺少 email → 400；email 不匹配 → 403；email 匹配 → 200（大小寫不敏感）。
+  - 登入用戶驗證：userId 不匹配 → 403；userId 匹配 → 200；未登入 → 403。
+  - 無法辨識身份的訂單 → 403。
+
+* **供應商參數驗證**：錯誤的參數應返回錯誤；成功建立交易後檢查回傳資料格式。
+* **webhook 驗證**：模擬供應商送出簽名錯誤的通知應被拒絕；成功的通知應更新 `payments.status` 與 `orders.paymentStatus`。
+* **退款流程**：部分或全額退款後應記錄於 `payments`，並更新訂單狀態為 `refunded`。
+
 ### 租戶與計費模組
 
 隨著系統轉向多租戶架構，需驗證帳務與配額機制運行正確：
@@ -159,5 +179,33 @@
 * **測試案例庫**：包含詳細 Test Cases、Test Scripts，用於自動化測試。
 * **測試報告**：每個 Sprint 結束後提交測試執行報告，包含通過率、缺陷統計與改進建議。
 * **最終驗收報告**：系統上線前，整合所有測試結果並出具簽核檔。
+
+## 已實作測試套件 [Inferred from code]
+
+> 截至 2026-02-10，專案共有 **94+ 測試案例**，分布於 **8 個測試套件**。
+
+| 測試套件 | 檔案路徑 | 測試數 | 類型 | 涵蓋範圍 |
+|---|---|---|---|---|
+| **Payment Endpoints** | `tests/api/payment-endpoints.test.ts` | 17 | 整合/安全 | pay/status 端點：tenant 邊界、跨租戶、guest email 驗證、session userId、重複付款、orphan orders |
+| **UCP v1 Handlers** | `tests/api/ucp-v1-handlers.test.ts` | 23 | 單元 | Money utils、Google adapter 轉換、shipping engine、callback HMAC 簽名/重試、checkout session 更新 |
+| **UCP v1 E2E** | `tests/api/ucp-v1-e2e.test.ts` | — | E2E | UCP 完整結帳流程（create session → update → complete → get order） |
+| **Single Shop Enforcement** | `tests/api/single-shop-enforcement.test.ts` | — | 整合 | 單店制 DB 約束（`@@unique([tenantId])`）、API 路由行為 |
+| **Single Shop Handlers** | `tests/api/single-shop-handlers.test.ts` | — | 單元 | 單店制 handler 邏輯（checkout 不傳 shopId、order lookup 由 tenant 推導） |
+| **Tenant Isolation** | `tests/api/tenant-isolation.test.ts` | — | 整合 | 跨租戶資料隔離驗證 |
+| **Tenant Resolver** | `tests/lib/tenant/resolve-tenant.test.ts` | — | 單元 | hostname → tenant 解析（custom domain、subdomain、localhost fallback） |
+| **Utils** | `tests/lib/utils.test.ts` | — | 單元 | 公用工具函式（formatCurrency、slugify 等） |
+
+### 測試執行指令
+
+```bash
+# 執行所有測試
+yarn test
+
+# 執行 UCP 相關測試
+yarn test:ucp
+
+# 執行單一套件
+npx jest tests/api/payment-endpoints.test.ts
+```
 
 此測試計畫旨在提供完整的測試策略與實作指引，確保 AIsell 在功能與品質上達到預期標準。實際測試案例及腳本需依需求調整，並與開發進度同步更新。
